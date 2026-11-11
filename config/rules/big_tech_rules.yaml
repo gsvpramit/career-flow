@@ -1,0 +1,80 @@
+version: "1.0"
+target_seniority:
+  min_yoe: 4
+  max_yoe: 8
+  expected_signals:
+    - "system design"
+    - "architecture"
+    - "ownership"
+    - "cross-functional"
+    - "mentorship"
+    - "reliability"
+    - "latency"
+    - "throughput"
+    - "scalability"
+    - "production"
+    - "trade-offs"
+
+ats_formatting:
+  single_column_only: true
+  disallow_tables_and_sidebars: true
+  disallow_icons_and_skill_bars: true
+  disallow_summary_by_default: true
+  require_selectable_pdf_text: true
+  standard_headings:
+    - "Education"
+    - "Experience"
+    - "Projects"
+    - "Technical Skills"
+  margin_inches: 0.5
+
+bullet_quality:
+  prefer_xyz_formula: true # Accomplished [X] as measured by [Y], by doing [Z]
+  min_quantified_bullet_ratio: 0.5
+  max_bullet_chars: 220
+  strong_action_verbs:
+    - "architected"
+    - "built"
+    - "designed"
+    - "engineered"
+    - "scaled"
+    - "optimized"
+    - "reduced"
+    - "migrated"
+    - "automated"
+    - "led"
+    - "owned"
+    - "delivered"
+    - "implemented"
+    - "deployed"
+    - "cut"
+    - "improved"
+  weak_phrases:
+    - "responsible for"
+    - "helped with"
+    - "worked on"
+    - "assisted in"
+    - "duties included"
+    - "tasked with"
+
+humanizer_guardrails:
+  ai_slop_banlist:
+    - "spearheaded"
+    - "leveraged"
+    - "synergized"
+    - "revolutionized"
+    - "cutting-edge"
+    - "game-changing"
+    - "seamlessly"
+    - "delved"
+    - "tapestry"
+    - "holistic"
+    - "paradigm shift"
+    - "best-in-class"
+  max_same_verb_repeats: 2
+
+scoring_weights:
+  weighted_keyword_coverage: 0.45
+  seniority_and_work_alignment: 0.25
+  bullet_impact_and_xyz: 0.20
+  ats_format_and_budget: 0.10

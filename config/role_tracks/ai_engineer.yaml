@@ -1,0 +1,70 @@
+id: ai_engineer
+display_name: AI Engineer
+aliases:
+  - Senior AI Engineer
+  - Applied AI Engineer
+  - LLM Engineer
+  - GenAI Engineer
+  - Generative AI Engineer
+  - Agentic AI Engineer
+  - AI Systems Engineer
+  - AI Software Engineer
+  - Staff AI Engineer
+description: 4-8 YoE production LLM applications, RAG, agents, evals, and model serving
+target_yoe_range:
+  - 4
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - llm
+    - rag
+    - retrieval augmented generation
+    - ai agents
+    - function calling
+    - structured output
+    - pytorch
+    - fastapi
+    - embeddings
+    - vector database
+    - prompt engineering
+    - evaluation
+    - evals
+    - vllm
+    - inference
+  important_systems:
+    - fine-tuning
+    - lora
+    - quantization
+    - guardrails
+    - observability
+    - langgraph
+    - pydantic
+    - docker
+    - kubernetes
+    - gpu
+    - cuda
+    - latency
+    - token optimization
+    - streaming
+  senior_leadership:
+    - architecture
+    - production deployment
+    - benchmarking
+    - cross-functional
+    - mentorship
+    - cost optimization
+    - reliability
+  bonus_nice_to_have:
+    - triton
+    - tensorrt
+    - onnx
+    - ray
+    - huggingface
+    - multimodal
+    - rlhf

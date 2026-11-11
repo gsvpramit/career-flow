@@ -1,0 +1,60 @@
+id: ml_engineer
+display_name: Machine Learning Engineer
+aliases:
+  - Senior Machine Learning Engineer
+  - Senior ML Engineer
+  - MLE
+  - ML Infrastructure Engineer
+  - MLOps Engineer
+  - Applied Scientist
+description: 4-8 YoE model training, feature stores, ranking/recommendations, and MLOps pipelines
+target_yoe_range:
+  - 4
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - pytorch
+    - tensorflow
+    - machine learning
+    - deep learning
+    - feature engineering
+    - training pipeline
+    - distributed training
+    - mlops
+    - model serving
+    - ranking
+    - recommendation systems
+    - sql
+    - spark
+  important_systems:
+    - kubernetes
+    - docker
+    - ray
+    - mlflow
+    - feature store
+    - a/b testing
+    - offline evaluation
+    - online inference
+    - latency
+    - data quality
+    - monitoring
+  senior_leadership:
+    - experimentation
+    - architecture
+    - model lifecycle
+    - cross-functional
+    - mentorship
+    - ownership
+  bonus_nice_to_have:
+    - jax
+    - triton
+    - onnx
+    - xgboost
+    - lightgbm
+    - cuda

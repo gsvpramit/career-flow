@@ -1,0 +1,56 @@
+id: data_engineer
+display_name: Data & AI Pipeline Engineer
+aliases:
+  - Senior Data Engineer
+  - Staff Data Engineer
+  - Data Platform Engineer
+  - Streaming Data Engineer
+  - Analytics Infrastructure Engineer
+description: 4-8 YoE distributed ETL/ELT pipelines, lakehouse architectures, and streaming analytics
+target_yoe_range:
+  - 4
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - sql
+    - spark
+    - kafka
+    - airflow
+    - dbt
+    - snowflake
+    - bigquery
+    - databricks
+    - data warehouse
+    - etl
+    - streaming
+    - data modeling
+  important_systems:
+    - iceberg
+    - delta lake
+    - parquet
+    - kubernetes
+    - aws
+    - gcp
+    - data quality
+    - schema evolution
+    - ci/cd
+    - partitioning
+  senior_leadership:
+    - architecture
+    - governance
+    - cost optimization
+    - mentorship
+    - cross-functional
+    - reliability
+  bonus_nice_to_have:
+    - flink
+    - trino
+    - clickhouse
+    - redshift
+    - terraform

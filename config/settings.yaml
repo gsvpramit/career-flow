@@ -1,0 +1,63 @@
+# Project Job Mark1 — Runtime Configuration (Two-Way Synced with UI)
+# Any edits here automatically reflect in the Backend & UI.
+
+target_role_tracks:
+  - "senior_swe"
+  - "ai_engineer"
+  - "fde"
+target_locations:
+  - "Seattle, WA"
+  - "San Diego, CA"
+  - "San Francisco, CA"
+  - "Remote"
+work_types:
+  - "remote"
+  - "hybrid"
+  - "onsite"
+job_types:
+  - "full-time"
+work_authorization: "h1b"          # Options: h1b | any | us_citizen_gc_only
+posted_within_default: "24h"       # Options: 1h | 12h | 24h | 7d | any
+target_yoe_min: 4
+target_yoe_max: 8
+target_salary_min: null            # Annual USD floor (postings without salary are kept)
+min_hourly_rate: null              # Hourly USD floor for contracts (omitted rate kept)
+min_relevance_score: 0             # 0-100 minimum match threshold during batch scraping
+scraper_sources:
+  - "greenhouse"
+  - "lever"
+  - "linkedin"
+company_boards:
+  - "greenhouse:anthropic"
+  - "greenhouse:databricks"
+  - "greenhouse:scaleai"
+  - "greenhouse:stripe"
+  - "lever:palantir"
+title_blocklist:
+  - "intern"
+  - "junior"
+  - "entry level"
+  - "director"
+  - "vp "
+  - "vice president"
+  - "chief"
+  - "hardware engineer"
+  - "mechanical engineer"
+  - "civil engineer"
+  - "account executive"
+  - "recruiter"
+  - "nurse"
+  - "gtm "
+  - "strategy & operations"
+  - "finance systems"
+  - "tax"
+resume_filename_format: "{full_name}_{company}_{role}"
+export_formats:
+  - "pdf"
+  - "docx"
+page_budget: 1                     # Options: 1 | 2
+llm_mode: "off"                    # Options: off | ollama_docker
+llm_model: "qwen3:14b"
+ollama_base_url: "http://localhost:11434"
+strict_humanizer_gate: true
+output_dir: "output"

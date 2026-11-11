@@ -1,0 +1,59 @@
+id: "fde"
+display_name: "Forward Deployed Engineer (FDE)"
+aliases:
+  - "FDE"
+  - "Forward Deployed Software Engineer"
+  - "Solutions Engineer"
+  - "Field Engineer"
+description: "4-8 YoE client-facing software/AI architect shipping production integrations under ambiguity"
+target_yoe_range: [4, 8]
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - "python"
+    - "typescript"
+    - "sql"
+    - "api integration"
+    - "data pipeline"
+    - "llm"
+    - "rag"
+    - "prototyping"
+    - "production deployment"
+    - "customer facing"
+    - "stakeholder"
+    - "technical discovery"
+    - "docker"
+    - "aws"
+    - "gcp"
+  important_systems:
+    - "etl"
+    - "authentication"
+    - "oauth"
+    - "sso"
+    - "webhooks"
+    - "observability"
+    - "troubleshooting"
+    - "react"
+    - "fastapi"
+    - "kubernetes"
+    - "security"
+    - "enterprise integration"
+  senior_leadership:
+    - "solution architecture"
+    - "end-to-end ownership"
+    - "executive communication"
+    - "ambiguity"
+    - "field engineering"
+    - "customer success"
+    - "technical lead"
+  bonus_nice_to_have:
+    - "terraform"
+    - "snowflake"
+    - "databricks"
+    - "spark"
+    - "airflow"
+    - "azure"

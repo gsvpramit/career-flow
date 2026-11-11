@@ -1,0 +1,60 @@
+id: platform_infra
+display_name: Platform & Infrastructure Engineer
+aliases:
+  - Senior Infrastructure Engineer
+  - Senior Platform Engineer
+  - Cloud Infrastructure Engineer
+  - Production Engineer
+  - Distributed Compute Engineer
+  - Senior Site Reliability Engineer
+  - Staff SRE
+description: 4-8 YoE Kubernetes orchestration, cloud compute, observability, and high-reliability infrastructure
+target_yoe_range:
+  - 4
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - kubernetes
+    - docker
+    - terraform
+    - aws
+    - gcp
+    - go
+    - python
+    - linux
+    - networking
+    - ci/cd
+    - distributed systems
+    - observability
+    - prometheus
+    - grafana
+  important_systems:
+    - service mesh
+    - helm
+    - gpu cluster
+    - slurm
+    - high availability
+    - incident response
+    - automation
+    - security
+    - iam
+    - capacity planning
+  senior_leadership:
+    - reliability
+    - slo
+    - sla
+    - architecture
+    - cost optimization
+    - on-call
+    - postmortem
+  bonus_nice_to_have:
+    - ansible
+    - pulumi
+    - vault
+    - kafka
+    - opentelemetry
