@@ -6,6 +6,7 @@ import { ReportsPanel } from "./components/ReportsPanel";
 import { ResumePanel } from "./components/ResumePanel";
 import { SkillsGraphPanel } from "./components/SkillsGraphPanel";
 import { ActivityLogsPanel } from "./components/ActivityLogsPanel";
+import { AuthLandingModal, type AuthUser } from "./components/AuthLandingModal";
 import { getActivityLogs, subscribeActivityLogs } from "./utils/activityLogger";
 import type {
   ConfigResponse,
@@ -68,6 +69,14 @@ export default function App() {
   const [unreadErrorCount, setUnreadErrorCount] = useState<number>(() => {
     return getActivityLogs().filter((l) => !l.read && l.level === "error").length;
   });
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem("careerflow.auth_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     const unsub = subscribeActivityLogs((logs) => {
@@ -125,6 +134,13 @@ export default function App() {
 
   return (
     <div className={`app-shell app-shell-${viewportMode}`}>
+      {!currentUser && (
+        <AuthLandingModal
+          onLoginSuccess={(user) => setCurrentUser(user)}
+          currentUser={currentUser}
+        />
+      )}
+
       <header className="topbar">
         <div className="brand">
           <h1 className="brand-title">CareerFlow</h1>
@@ -133,26 +149,70 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="tab-nav" aria-label="Workspace Tabs">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-              {tab.id === "logs" && unreadErrorCount > 0 && (
-                <span
-                  className="pill pill-red"
-                  style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 10 }}
-                >
-                  {unreadErrorCount}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <nav className="tab-nav" aria-label="Workspace Tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+                {tab.id === "logs" && unreadErrorCount > 0 && (
+                  <span
+                    className="pill pill-red"
+                    style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", borderRadius: 10 }}
+                  >
+                    {unreadErrorCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {currentUser && (
+            <div className="row-wrap" style={{ alignItems: "center", gap: 8, marginLeft: 4 }}>
+              <div className="user-badge-chip">
+                <span style={{ fontSize: 13 }}>
+                  {currentUser.provider === "guest"
+                    ? "⚡"
+                    : currentUser.provider === "google"
+                    ? "🌐"
+                    : currentUser.provider === "microsoft"
+                    ? "💼"
+                    : "👤"}
                 </span>
-              )}
-            </button>
-          ))}
-        </nav>
+                <span style={{ fontWeight: 600 }}>{currentUser.username}</span>
+                {currentUser.notifyEnabled && (
+                  <span
+                    className="pill pill-green"
+                    style={{ fontSize: 10, padding: "1px 6px" }}
+                    title={`Job notifications active for ${currentUser.email}`}
+                  >
+                    Alerts On
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem("careerflow.auth_user");
+                  } catch {
+                    // ignore
+                  }
+                  setCurrentUser(null);
+                }}
+                title="Sign out of CareerFlow"
+                style={{ fontSize: 12, padding: "4px 8px" }}
+              >
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {error && (
