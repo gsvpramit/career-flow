@@ -681,12 +681,14 @@ def fetch_linkedin_candidates(
     seen_card_urls: set[str] = set()
     results: list[RawCandidate] = []
 
-    # Fetch multiple pages (up to 3 pages / 75 items) for rich candidate yields
-    start_offsets = [0, 25, 50] if posted_within in ("7d", "30d", "any") else [0, 25]
+    # Fetch multiple pages (up to 4-5 pages / 100-125 items) for rich candidate yields
+    start_offsets = [0, 25, 50, 75, 100] if posted_within in ("24h", "7d", "30d", "any") else [0, 25, 50]
 
     for start_offset in start_offsets:
         params = {**params_base, "start": str(start_offset)}
         try:
+            if start_offset > 0:
+                time.sleep(0.35)  # Brief pause between pages to stay under rate limits
             resp = client.get(url, params=params, timeout=12.0)
             if resp.status_code == 429:
                 break
