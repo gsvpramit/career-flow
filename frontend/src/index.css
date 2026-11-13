@@ -1975,3 +1975,35 @@ label {
   font-size: 12.5px;
 }
 
+/* ==========================================================================
+   Mobile & Touchscreen Responsive Enhancements
+   ========================================================================== */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .brand-title {
+    font-size: 17px;
+  }
+  .brand-subtitle {
+    display: none;
+  }
+  .tab-nav {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-btn {
+    white-space: nowrap;
+    padding: 6px 10px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .auth-landing-card {
+    padding: 22px 16px;
+  }
+}
+
+
