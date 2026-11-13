@@ -17,3 +17,7 @@ output/
 # Environment / IDE
 .env
 .DS_Store
+
+# Future Roadmap & Local Scratch Notes
+FUTURE_ROADMAP.md
+
