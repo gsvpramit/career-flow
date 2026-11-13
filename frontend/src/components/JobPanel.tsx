@@ -44,10 +44,10 @@ const FRESHNESS_OPTIONS = [
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
-  linkedin: "LinkedIn Public Search",
-  greenhouse: "Greenhouse Boards",
-  ashby: "Ashby Boards",
-  lever: "Lever Boards",
+  linkedin: "LinkedIn",
+  greenhouse: "Greenhouse",
+  ashby: "Ashby",
+  lever: "Lever",
 };
 
 function formatBoardLabel(entry: string): string {
@@ -311,10 +311,10 @@ export function JobPanel({
     }));
     return boards.length > 0
       ? [
-          { title: "Top Recruiting Sources", items: platforms },
-          { title: "Company ATS Boards", items: boards },
+          { title: "Platforms", items: platforms },
+          { title: "Company Boards", items: boards },
         ]
-      : [{ title: "Top Recruiting Sources", items: platforms }];
+      : [{ title: "Platforms", items: platforms }];
   }, [config?.values.company_boards]);
 
   const allSourceOptionKeys = useMemo(
@@ -631,10 +631,10 @@ export function JobPanel({
           </div>
         </div>
 
-        {/* Pre-scrape Primary US Location, Target Roles & Recruiting Sources Filters */}
+        {/* Pre-scrape Primary US Location, Target Roles & Job Sources Filters */}
         <div className="form-grid-3">
           <MultiSelectCheckboxDropdown
-            label="Location (Primary · US Only Default)"
+            label="Locations"
             summaryText={locationSummary}
             groups={locationGroups}
             selected={selectedLocations}
@@ -667,7 +667,7 @@ export function JobPanel({
           />
 
           <MultiSelectCheckboxDropdown
-            label="Target Roles (With Typical YoE)"
+            label="Target Roles"
             summaryText={roleSummary}
             groups={roleGroups}
             selected={selectedRoleTracks}
@@ -720,7 +720,7 @@ export function JobPanel({
           />
 
           <MultiSelectCheckboxDropdown
-            label="Recruiting Websites & Boards"
+            label="Job Sources"
             summaryText={sourceSummary}
             groups={sourceGroups}
             selected={selectedSourceKeys}

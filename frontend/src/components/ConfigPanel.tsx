@@ -283,6 +283,14 @@ export function ConfigPanel({ config, roleTracks, onUpdated, onDataFlushed }: Co
             }
       );
       setConfirmMode("none");
+      try {
+        localStorage.removeItem("careerflow.jobProgress.v1");
+        localStorage.removeItem("careerflow.jobDrafts.v1");
+        localStorage.removeItem("careerflow.tailorHistory.v1");
+        window.dispatchEvent(new CustomEvent("careerflow.dataFlushed"));
+      } catch {
+        // ignore storage errors
+      }
       if (onDataFlushed) {
         await onDataFlushed();
       }

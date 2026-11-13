@@ -181,7 +181,7 @@ function computeJobStage(job: JobPostingResponse, prog?: JobProgressState) {
       isPendingDownload: false,
     };
   }
-  if (prog?.downloaded || job.application_status === "resume_created") {
+  if (job.application_status === "resume_created" || (prog?.downloaded && job.application_status !== "ready")) {
     return {
       stepCount: 3,
       label: "Resume Downloaded",
@@ -750,6 +750,16 @@ export function SessionJobsWorkspace({
     setSelectedFilteredIds([]);
     setSelectedDiscardedIds([]);
   }, [workspaceView]);
+
+  useEffect(() => {
+    const handleFlushed = () => {
+      setJobProgressMap({});
+      jobDraftsRef.current = {};
+      setTailorPreview(null);
+    };
+    window.addEventListener("careerflow.dataFlushed", handleFlushed);
+    return () => window.removeEventListener("careerflow.dataFlushed", handleFlushed);
+  }, []);
 
   const autoFilteredItems = useMemo(
     () => filteredItems.filter((item) => item.category === "auto_filtered"),
@@ -2774,7 +2784,7 @@ export function SessionJobsWorkspace({
             <div className="card stack-sm">
               <div className="row-between">
                 <strong style={{ fontSize: 13 }}>
-                  Quick Multi-Employer Base Generator (Summary + Experience + Projects + Skills + MS/BS)
+                  Base Resume Generator
                 </strong>
                 <span className="small-note">
                   Customize employers, dates &amp; degrees — generate with Ollama or Script.
@@ -3121,7 +3131,7 @@ export function SessionJobsWorkspace({
                   {scoreReport.missing_requirements && scoreReport.missing_requirements.length > 0 && (
                     <div className="card stack-xs" style={{ padding: "10px 12px" }}>
                       <strong style={{ fontSize: 12.5 }}>
-                        Elaborate Missing Requirements &amp; Tailoring Targets ({scoreReport.missing_requirements.length})
+                        Missing Requirements ({scoreReport.missing_requirements.length})
                       </strong>
                       <ul className="req-gap-list">
                         {scoreReport.missing_requirements.map((req, idx) => (
@@ -3152,7 +3162,7 @@ export function SessionJobsWorkspace({
                 <div className="skills-all-drawer stack-sm">
                   <div className="row-between">
                     <strong style={{ fontSize: 13 }}>
-                      All Skills &amp; Technologies Listed in This Posting ({allPostingSkills.length})
+                      Posting Skills ({allPostingSkills.length})
                     </strong>
                     <span className="small-note">
                       Includes active role track weights + cross-track tech stack mentions
@@ -4367,7 +4377,7 @@ export function SessionJobsWorkspace({
                     <div className="tailor-progress-banner stack-xs" style={{ marginTop: 8 }}>
                       <div className="row-between">
                         <strong style={{ fontSize: 13, color: "var(--accent-blue)" }}>
-                          Generating &amp; Calibrating Resumes for Saved Jobs (Targeting 80–85% ATS)...
+                          Generating Resumes (80–85% ATS)...
                         </strong>
                         <span className="mono" style={{ fontSize: 12 }}>In Progress...</span>
                       </div>

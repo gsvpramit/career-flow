@@ -1486,8 +1486,9 @@ def flush_workspace_data(
     resumes_deleted = 0
     output_items_deleted = 0
 
-    if do_runs:
-        runs_deleted = int(db.execute(delete(TailoringRunRecord)).rowcount or 0)
+    if do_runs or do_resumes or payload.master_flush:
+        if do_runs:
+            runs_deleted = int(db.execute(delete(TailoringRunRecord)).rowcount or 0)
         if not do_sessions:
             db.execute(
                 update(JobPostingRecord)
