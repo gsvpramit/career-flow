@@ -659,6 +659,10 @@ def fetch_linkedin_candidates(
         "keywords": role_query,
         "location": location_query or "United States",
     }
+    loc_clean = (location_query or "").strip().lower()
+    if not loc_clean or loc_clean in ("united states", "all_us", "us", "usa"):
+        params_base["geoId"] = "103644278"
+
     ftpr = LINKEDIN_FTPR.get(posted_within)
     if ftpr:
         params_base["f_TPR"] = ftpr
@@ -681,14 +685,15 @@ def fetch_linkedin_candidates(
     seen_card_urls: set[str] = set()
     results: list[RawCandidate] = []
 
-    # Fetch multiple pages (up to 4-5 pages / 100-125 items) for rich candidate yields
-    start_offsets = [0, 25, 50, 75, 100] if posted_within in ("24h", "7d", "30d", "any") else [0, 25, 50]
+    # LinkedIn returns 10 cards per request on seeMoreJobPostings.
+    # Use 10-step offsets to collect all consecutive job cards without skipping.
+    start_offsets = list(range(0, 100, 10)) if posted_within in ("1h", "12h", "24h", "7d", "30d", "any") else [0, 10, 20, 30]
 
     for start_offset in start_offsets:
         params = {**params_base, "start": str(start_offset)}
         try:
             if start_offset > 0:
-                time.sleep(0.35)  # Brief pause between pages to stay under rate limits
+                time.sleep(0.2)  # Brief pause between pages to stay under rate limits
             resp = client.get(url, params=params, timeout=12.0)
             if resp.status_code == 429:
                 break
