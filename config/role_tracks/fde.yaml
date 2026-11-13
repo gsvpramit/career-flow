@@ -1,12 +1,26 @@
-id: "fde"
-display_name: "Forward Deployed Engineer (FDE)"
+id: fde
+display_name: Forward Deployed Engineer (FDE)
+category: engineering_specialty
+typical_yoe_label: 3–7 yrs
+search_query: Forward Deployed Engineer
+company_examples:
+  - Palantir Delta / FDE
+  - Scale AI FDE
+  - OpenAI Solutions Engineer
+  - Anthropic Applied AI FDE
 aliases:
-  - "FDE"
-  - "Forward Deployed Software Engineer"
-  - "Solutions Engineer"
-  - "Field Engineer"
-description: "4-8 YoE client-facing software/AI architect shipping production integrations under ambiguity"
-target_yoe_range: [4, 8]
+  - Forward Deployed Engineer
+  - FDE
+  - Forward Deployed Software Engineer
+  - Forward Deployed AI Engineer
+  - Solutions AI Engineer
+  - Solutions Engineer
+  - Field Engineer
+  - Customer Solutions Engineer
+description: 3–7 YoE · Client-embedded software/AI builder delivering end-to-end production integrations under ambiguity
+target_yoe_range:
+  - 3
+  - 7
 weights:
   core_must_have: 3.0
   important_systems: 2.0
@@ -14,46 +28,46 @@ weights:
   bonus_nice_to_have: 1.0
 keywords:
   core_must_have:
-    - "python"
-    - "typescript"
-    - "sql"
-    - "api integration"
-    - "data pipeline"
-    - "llm"
-    - "rag"
-    - "prototyping"
-    - "production deployment"
-    - "customer facing"
-    - "stakeholder"
-    - "technical discovery"
-    - "docker"
-    - "aws"
-    - "gcp"
+    - python
+    - typescript
+    - sql
+    - api integration
+    - data pipeline
+    - llm
+    - rag
+    - prototyping
+    - production deployment
+    - customer facing
+    - stakeholder
+    - technical discovery
+    - docker
+    - aws
+    - gcp
   important_systems:
-    - "etl"
-    - "authentication"
-    - "oauth"
-    - "sso"
-    - "webhooks"
-    - "observability"
-    - "troubleshooting"
-    - "react"
-    - "fastapi"
-    - "kubernetes"
-    - "security"
-    - "enterprise integration"
+    - etl
+    - authentication
+    - oauth
+    - sso
+    - webhooks
+    - observability
+    - troubleshooting
+    - react
+    - fastapi
+    - kubernetes
+    - security
+    - enterprise integration
   senior_leadership:
-    - "solution architecture"
-    - "end-to-end ownership"
-    - "executive communication"
-    - "ambiguity"
-    - "field engineering"
-    - "customer success"
-    - "technical lead"
+    - solution architecture
+    - end-to-end ownership
+    - executive communication
+    - ambiguity
+    - field engineering
+    - customer success
+    - technical lead
   bonus_nice_to_have:
-    - "terraform"
-    - "snowflake"
-    - "databricks"
-    - "spark"
-    - "airflow"
-    - "azure"
+    - terraform
+    - snowflake
+    - databricks
+    - spark
+    - airflow
+    - azure

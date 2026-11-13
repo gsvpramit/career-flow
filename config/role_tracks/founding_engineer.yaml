@@ -1,0 +1,65 @@
+id: founding_engineer
+display_name: Founding Engineer (Early-Stage Startup)
+category: engineering_specialty
+typical_yoe_label: 3–8 yrs
+search_query: Founding Engineer
+company_examples:
+  - Seed / Series A Founding SWE
+  - YC Founding AI Engineer
+  - First 10 Engineers (#1–#5 Hire)
+aliases:
+  - Founding Engineer
+  - Founding Software Engineer
+  - Founding AI Engineer
+  - Founding Full Stack Engineer
+  - Founding Backend Engineer
+  - Founding Product Engineer
+  - Early Stage Engineer
+  - 0 to 1 Engineer
+description: 3–8 YoE · Seed–Series A generalist building 0→1 across frontend, backend, AI, infra & direct customer feedback
+target_yoe_range:
+  - 3
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.8
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - typescript
+    - react
+    - fastapi
+    - node.js
+    - postgresql
+    - aws
+    - gcp
+    - docker
+    - llm
+    - rest api
+    - end-to-end
+  important_systems:
+    - 0 to 1
+    - rapid prototyping
+    - system architecture
+    - authentication
+    - deployment
+    - observability
+    - rag
+    - ai agents
+    - payments
+    - ci/cd
+  senior_leadership:
+    - ownership
+    - ambiguity
+    - customer discovery
+    - technical leadership
+    - product velocity
+    - hiring
+  bonus_nice_to_have:
+    - kubernetes
+    - terraform
+    - next.js
+    - redis
+    - stripe

@@ -105,7 +105,7 @@ export function SkillsGapPanel({
           <div className="report-grid">
             <div className="card">
               <div className="row-between" style={{ marginBottom: 12 }}>
-                <h3 style={{ margin: 0, fontSize: 15 }}>Top Missing Skills (Opportunity Areas)</h3>
+                <h3 style={{ margin: 0, fontSize: 15 }}>Top Missing Skills</h3>
                 <span className="pill pill-amber">{data.overall_missing.length} shown</span>
               </div>
               {data.overall_missing.length === 0 ? (
@@ -144,7 +144,7 @@ export function SkillsGapPanel({
 
             <div className="card">
               <div className="row-between" style={{ marginBottom: 12 }}>
-                <h3 style={{ margin: 0, fontSize: 15 }}>Covered Strengths Across Resumes</h3>
+                <h3 style={{ margin: 0, fontSize: 15 }}>Covered Strengths</h3>
                 <span className="pill pill-green">{data.overall_strengths.length} matched</span>
               </div>
               {data.overall_strengths.length === 0 ? (
@@ -174,7 +174,7 @@ export function SkillsGapPanel({
 
           {data.by_role.length > 0 && (
             <div className="card">
-              <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>Gap Breakdown by Target Role</h3>
+              <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>Role Gaps</h3>
               <div className="report-grid">
                 {data.by_role.map((role) => (
                   <div key={role.role_track} className="card-elevated stack-sm">

@@ -1,4 +1,15 @@
-export type TabId = "sessions" | "skills_gap" | "reports" | "resume" | "config";
+export type TabId = "sessions" | "reports" | "skills_graph" | "resume" | "config" | "logs";
+
+export interface ActivityLogEntry {
+  id: string;
+  timestamp: string;
+  level: "error" | "warning" | "info" | "success";
+  source: string;
+  title: string;
+  message: string;
+  details?: string;
+  read?: boolean;
+}
 
 export interface ConfigOption {
   value: string | number | boolean;
@@ -26,17 +37,20 @@ export interface AppSettingsValues {
   job_types: ("full-time" | "contract")[];
   work_authorization: "h1b" | "any" | "us_citizen_gc_only";
   posted_within_default: "1h" | "12h" | "24h" | "7d" | "any";
-  llm_mode: "off" | "ollama_docker" | null;
+  llm_mode: "off" | "ollama_local" | "ollama_docker" | null;
   llm_model: string;
   ollama_base_url: string;
   export_formats: ("pdf" | "docx")[];
   page_budget: number;
-  target_yoe_min: number;
-  target_yoe_max: number;
+  default_bullets_per_role: number;
+  avoided_ai_words: string[];
+  custom_tailor_instructions: string;
+  target_yoe_min: number | null;
+  target_yoe_max: number | null;
   target_salary_min: number | null;
   min_hourly_rate: number | null;
   min_relevance_score: number;
-  scraper_sources: ("greenhouse" | "lever" | "linkedin")[];
+  scraper_sources: ("greenhouse" | "lever" | "ashby" | "linkedin")[];
   company_boards: string[];
   title_blocklist: string[];
   resume_filename_format: string;
@@ -56,6 +70,10 @@ export interface ConfigResponse {
 export interface RoleTrackConfig {
   id: string;
   display_name: string;
+  category?: string;
+  typical_yoe_label?: string;
+  search_query?: string;
+  company_examples?: string[];
   aliases: string[];
   description: string;
   target_yoe_range: number[];
@@ -190,7 +208,15 @@ export interface JobAnalysis {
   work_auth: string;
 }
 
-export type ApplicationStatus = "ready" | "resume_created" | "applied" | "skipped";
+export type ApplicationStatus =
+  | "ready"
+  | "resume_created"
+  | "applied"
+  | "screening"
+  | "interviewing"
+  | "offer"
+  | "rejected"
+  | "skipped";
 export type JobDisposition = "kept" | "discarded";
 
 export interface JobPostingResponse {
@@ -206,6 +232,8 @@ export interface JobPostingResponse {
   work_auth: string;
   disposition: JobDisposition;
   application_status: ApplicationStatus;
+  applied_at?: string | null;
+  application_notes?: string;
   relevance_score: number;
   created_at: string;
 }
@@ -228,11 +256,15 @@ export interface ScrapeSessionSummary {
   scanned_count: number;
   saved_count: number;
   filtered_count: number;
+  seen_skipped_count: number;
+  discarded_count: number;
   filter_breakdown: Record<string, number>;
   source_notes: string[];
   locations: ScrapeSessionLocationCount[];
   roles: ScrapeSessionRoleCount[];
   currencies: string[];
+  status_counts: Record<string, number>;
+  sources_used: string[];
   created_at: string;
 }
 
@@ -256,6 +288,7 @@ export interface ScrapeBatchResult {
   source_notes: string[];
   saved_jobs: JobPostingResponse[];
   filtered_samples: FilteredJobSample[];
+  cancelled?: boolean;
 }
 
 export interface BulletDiagnostic {
@@ -276,9 +309,26 @@ export interface ATSReport {
   sub_scores: Record<string, number>;
   matched_skills: WeightedSkill[];
   missing_skills: WeightedSkill[];
+  resume_skills?: string[];
+  missing_requirements?: string[];
   bullet_diagnostics: BulletDiagnostic[];
   format_warnings: string[];
   estimated_pages: number;
+}
+
+export type TailorStrategy = "auto" | "ollama" | "claude" | "fallback_script";
+
+export interface SanityCheckItem {
+  check_id: string;
+  title: string;
+  status: "passed" | "repaired" | "warning";
+  detail: string;
+}
+
+export interface TailoringReasoningStep {
+  step: number;
+  phase: string;
+  decision: string;
 }
 
 export interface FieldChange {
@@ -316,6 +366,195 @@ export interface TailorPreviewResponse {
   field_changes: FieldChange[];
   experience_comparisons: ExperienceComparison[];
   tailored_resume: CanonicalResume;
+  tailor_mode?: "deterministic" | "fallback_script" | "ollama_llm";
+  model_used?: string | null;
+  humanized_count?: number;
+  humanizer_notes?: string[];
+  llm_notice?: string | null;
+  added_jd_skills?: string[];
+  target_score_met?: boolean;
+  target_score_min?: number;
+  target_score_max?: number;
+  in_target_band?: boolean;
+  bullets_per_experience?: number | null;
+  bullets_per_role_counts?: number[];
+  bullets_per_project?: number | null;
+  page_budget?: number;
+  reasoning_steps?: TailoringReasoningStep[];
+  sanity_checks?: SanityCheckItem[];
+  sanity_passed?: boolean;
+  sanity_summary?: string;
+}
+
+export interface LlmStatusResponse {
+  reachable: boolean;
+  base_url: string;
+  configured_model: string;
+  model_installed: boolean;
+  recommended_model?: string | null;
+  available_models: string[];
+  llm_mode?: string | null;
+  error?: string | null;
+}
+
+export interface LlmTestResponse {
+  ok: boolean;
+  model: string;
+  latency_ms: number;
+  sample_output: string;
+  error?: string | null;
+}
+
+export interface LlmBenchmarkItem {
+  model: string;
+  ok: boolean;
+  latency_ms: number;
+  json_valid: boolean;
+  schema_complete: boolean;
+  score: number;
+  rank: number;
+  notes: string;
+  error?: string | null;
+}
+
+export interface LlmBenchmarkResponse {
+  reachable: boolean;
+  base_url: string;
+  recommended_model?: string | null;
+  items: LlmBenchmarkItem[];
+}
+
+export type ResumeSectionName = "summary" | "experience" | "projects" | "skills" | "education";
+
+export interface TailorSectionRequest {
+  job_id: number;
+  resume_id?: number | null;
+  section: ResumeSectionName;
+  current_resume: CanonicalResume;
+  prompt: string;
+  engine: "ollama" | "claude" | "fallback_script";
+  model?: string | null;
+  avoided_words?: string[] | null;
+  bullets_per_experience?: number | null;
+  page_budget?: number | null;
+}
+
+export interface TailorSectionResponse {
+  job_id: number;
+  resume_id: number;
+  section: ResumeSectionName;
+  engine_used: "ollama_llm" | "claude" | "fallback_script";
+  model_used?: string | null;
+  updated_resume: CanonicalResume;
+  tailored_score: number;
+  tailored_report: ATSReport;
+  added_jd_skills: string[];
+  notice?: string | null;
+}
+
+export interface EditHistoryEntry {
+  step: number;
+  timestamp: string;
+  action: string;
+  detail: string;
+  atsScore: number;
+  engineLabel?: string;
+  resumeSnapshot?: CanonicalResume;
+}
+
+export interface BootstrapEmployerInput {
+  company: string;
+  title?: string | null;
+  location?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  bullets_count?: number | null;
+}
+
+export interface ResumeBootstrapRequest {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  role_track?: string;
+  years_experience?: number;
+  focus_skills?: string[];
+  employers?: BootstrapEmployerInput[];
+  recent_company?: string | null;
+  prior_company?: string | null;
+  graduate_degree?: string | null;
+  undergrad_degree?: string | null;
+  bullets_per_experience?: number;
+  bullets_per_role_counts?: number[] | null;
+  projects_count?: number;
+  page_budget?: number;
+  job_id?: number | null;
+  use_llm?: boolean;
+  save_as_base?: boolean;
+  resume_name?: string | null;
+}
+
+export interface BulkExportRequest {
+  resume_id?: number | null;
+  formats?: ("pdf" | "docx")[];
+  tailor_strategy?: TailorStrategy;
+  adapt_location?: boolean;
+  auto_size?: boolean;
+  target_score_min?: number;
+  target_score_max?: number;
+  include_already_created?: boolean;
+  max_jobs?: number | null;
+  avoided_words?: string[] | null;
+  custom_instructions?: string | null;
+  target_sections?: string[] | null;
+}
+
+export interface BulkExportJobItem {
+  job_id: number;
+  run_id: number;
+  company: string;
+  title: string;
+  role_track: string;
+  yoe_snippet?: string | null;
+  base_score: number;
+  tailored_score: number;
+  score_delta?: number;
+  in_target_band: boolean;
+  page_budget: number;
+  bullets_per_role_counts: number[];
+  tailor_mode: "fallback_script" | "deterministic" | "ollama_llm";
+  sanity_passed: boolean;
+  generated_files: string[];
+  tailored_resume?: CanonicalResume | null;
+  tailored_report?: ATSReport | null;
+  export_result?: ExportResponse | null;
+  error?: string | null;
+}
+
+export interface BulkExportResponse {
+  session_id: number;
+  total_saved_jobs: number;
+  processed_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  zip_download_url: string;
+  items: BulkExportJobItem[];
+}
+
+export interface ResumeBootstrapResponse {
+  resume: ResumeRecordResponse;
+  generation_mode: "ollama_llm" | "deterministic_template";
+  model_used?: string | null;
+  humanized_count: number;
+  notes: string[];
+}
+
+export interface HumanizeResumeResponse {
+  resume: CanonicalResume;
+  changes_count: number;
+  notes: string[];
+  mode: "deterministic" | "ollama_llm";
+  model_used?: string | null;
 }
 
 export interface ExportResponse {
@@ -380,6 +619,26 @@ export interface ReportBucketItem {
 
 type floatOrNumber = number;
 
+export interface AppliedJobSummaryItem {
+  job_id: number;
+  session_id?: number | null;
+  session_name: string;
+  company: string;
+  title: string;
+  location: string;
+  role_track: string;
+  role_label: string;
+  application_status: ApplicationStatus;
+  status_label: string;
+  applied_at?: string | null;
+  application_notes: string;
+  base_score?: number | null;
+  tailored_score?: number | null;
+  latest_run_id?: number | null;
+  latest_files: string[];
+  url?: string | null;
+}
+
 export interface AnalyticsReportResponse {
   generated_at: string;
   session_id?: number | null;
@@ -393,12 +652,154 @@ export interface AnalyticsReportResponse {
   omitted_salary_count: number;
   avg_relevance_score: number;
   total_exports: number;
+  total_applied?: number;
+  interviewing_count?: number;
+  offer_count?: number;
+  avg_tailored_score?: number;
+  avg_ats_lift?: number;
   by_location: ReportBucketItem[];
   by_role: ReportBucketItem[];
+  by_company?: ReportBucketItem[];
+  by_domain?: ReportBucketItem[];
+  by_posted_freshness?: ReportBucketItem[];
+  funnel_stages?: ReportBucketItem[];
   by_source: ReportBucketItem[];
   by_currency: ReportBucketItem[];
   by_status: ReportBucketItem[];
   by_filter_reason: ReportBucketItem[];
   top_missing_skills: SessionSkillGapItem[];
+  applied_jobs?: AppliedJobSummaryItem[];
   html_report_path?: string | null;
+}
+
+export interface SkillsGraphJobNode {
+  id: string;
+  job_id: number;
+  title: string;
+  company: string;
+  location: string;
+  role_track: string;
+  role_label: string;
+  domain: string;
+  relevance_score: number;
+  skill_count: number;
+  skills: string[];
+}
+
+export interface SkillsGraphSkillNode {
+  id: string;
+  keyword: string;
+  tier: string;
+  priority_label: string;
+  demand_count: number;
+  demand_pct: number;
+  covered_by_resumes: string[];
+  is_covered: boolean;
+  domains: string[];
+  companies: string[];
+  role_tracks: string[];
+  job_ids: number[];
+}
+
+export interface SkillsGraphEdge {
+  source: string;
+  target: string;
+  kind: "job_domain" | "job_skill" | "domain_skill";
+  weight: number;
+  tier: string;
+}
+
+export interface SkillsGraphDomainSummary {
+  domain: string;
+  job_count: number;
+  companies: string[];
+  role_tracks: string[];
+  top_skills: string[];
+  missing_skills: string[];
+}
+
+export interface SkillsGraphResponse {
+  session_id?: number | null;
+  session_name: string;
+  total_jobs: number;
+  total_skills: number;
+  covered_skills: number;
+  missing_skills: number;
+  jobs: SkillsGraphJobNode[];
+  skills: SkillsGraphSkillNode[];
+  edges: SkillsGraphEdge[];
+  domains: SkillsGraphDomainSummary[];
+}
+
+export interface LocationCatalogResponse {
+  top_20: string[];
+  other_us: string[];
+  all_us: string[];
+}
+
+export interface ScrapeProgressResponse {
+  session_id: number;
+  status: "idle" | "running" | "completed" | "cancelled" | "failed";
+  phase: string;
+  current_source: string;
+  steps_completed: number;
+  steps_total: number;
+  scanned_count: number;
+  processed_count: number;
+  saved_count: number;
+  filtered_count: number;
+  duplicate_skipped_count: number;
+  filter_breakdown: Record<string, number>;
+  source_notes: string[];
+  result?: ScrapeBatchResult | null;
+  error?: string | null;
+}
+
+export interface FlushDataRequest {
+  master_flush?: boolean;
+  flush_sessions_and_jobs?: boolean;
+  flush_tailoring_runs?: boolean;
+  flush_seen_history?: boolean;
+  seen_scope?: "all" | "discarded" | "auto_filtered";
+  flush_output_files?: boolean;
+  flush_resumes?: boolean;
+}
+
+export interface FlushDataResult {
+  sessions_deleted: number;
+  jobs_deleted: number;
+  tailoring_runs_deleted: number;
+  seen_deleted: number;
+  resumes_deleted: number;
+  output_items_deleted: number;
+}
+
+export interface SessionFilteredJobResponse {
+  id: number;
+  session_id: number;
+  url: string;
+  url_hash: string;
+  title: string;
+  company: string;
+  source: string;
+  location: string;
+  role_track: string;
+  category: "auto_filtered" | "seen_skipped";
+  filter_reason: string;
+  reason_label: string;
+  filter_reasons: string[];
+  reason_labels: string[];
+  suitability_notes: string[];
+  posted_at?: string | null;
+  raw_text_preview: string;
+  promoted_job_id?: number | null;
+  created_at: string;
+}
+
+export interface PromoteJobsResult {
+  session_id: number;
+  added_count: number;
+  already_saved_count: number;
+  failed_count: number;
+  saved_jobs: JobPostingResponse[];
 }

@@ -1,0 +1,63 @@
+id: data_scientist
+display_name: Data Scientist / Product Analytics
+category: ai_data
+typical_yoe_label: 2–6 yrs
+search_query: Data Scientist
+company_examples:
+  - Meta Product Data Scientist
+  - Spotify Data Scientist
+  - Stripe Data Scientist
+  - Ramp Analytics Engineer
+aliases:
+  - Data Scientist
+  - Senior Data Scientist
+  - Product Data Scientist
+  - Analytics Engineer
+  - Quantitative Analyst
+  - Decision Scientist
+  - Experimentation Scientist
+description: 2–6 YoE · Experimentation, A/B testing, causal inference, product telemetry, SQL & statistical modeling
+target_yoe_range:
+  - 2
+  - 6
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - sql
+    - a/b testing
+    - experimentation
+    - statistics
+    - causal inference
+    - pandas
+    - numpy
+    - scikit-learn
+    - data visualization
+    - product analytics
+    - hypothesis testing
+  important_systems:
+    - dbt
+    - snowflake
+    - bigquery
+    - pyspark
+    - regression
+    - time series
+    - forecasting
+    - metric design
+    - instrumentation
+  senior_leadership:
+    - stakeholder
+    - executive communication
+    - product strategy
+    - cross-functional
+    - storytelling
+  bonus_nice_to_have:
+    - r
+    - looker
+    - tableau
+    - amplitude
+    - airflow

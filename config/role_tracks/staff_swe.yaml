@@ -1,0 +1,86 @@
+id: staff_swe
+display_name: Staff Software Engineer
+category: swe_levels
+typical_yoe_label: 8–12+ yrs
+search_query: Staff Software Engineer
+company_examples:
+- Google L6
+- Meta E6
+- Databricks L6
+- Coinbase IC6
+- Stripe L4 Staff
+- Anthropic Staff MTS
+aliases:
+- Staff Software Engineer
+- Staff SWE
+- Staff Engineer
+- Staff Backend Engineer
+- Staff Full Stack Engineer
+- Staff Systems Engineer
+- Staff AI Engineer
+- Staff ML Engineer
+- Staff Data Engineer
+- Staff Platform Engineer
+- L6 Software Engineer
+- E6 Software Engineer
+- IC6 Software Engineer
+- ICT5 Software Engineer
+- Level 66 Software Engineer
+- Stripe L4 Staff Engineer
+- Staff Member of Technical Staff
+- Staff MTS
+- Lead Software Engineer
+description: 8–12+ YoE · Google L6, Meta E6, Databricks L6, Coinbase IC6, Stripe L4,
+  Staff MTS — multi-team architecture & org-wide technical leadership
+target_yoe_range:
+- 8
+- 12
+weights:
+  core_must_have: 3.0
+  important_systems: 2.2
+  senior_leadership: 2.0
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+  - distributed systems
+  - system architecture
+  - technical strategy
+  - python
+  - go
+  - java
+  - c++
+  - microservices
+  - kubernetes
+  - postgresql
+  - kafka
+  - aws
+  - gcp
+  important_systems:
+  - high availability
+  - fault tolerance
+  - multi-region
+  - scalability
+  - latency
+  - throughput
+  - observability
+  - security architecture
+  - platform design
+  - cost optimization
+  - Apache Spark
+  - Generative AI
+  - on-call
+  senior_leadership:
+  - technical roadmap
+  - rfc
+  - cross-functional
+  - executive communication
+  - mentorship
+  - org-wide impact
+  - engineering standards
+  - technical direction
+  bonus_nice_to_have:
+  - rust
+  - terraform
+  - clickhouse
+  - service mesh
+  - grpc

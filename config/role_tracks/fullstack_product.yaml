@@ -1,0 +1,69 @@
+id: fullstack_product
+display_name: Full-Stack / Product Engineer
+category: engineering_specialty
+typical_yoe_label: 2–6 yrs
+search_query: Full Stack Product Engineer
+company_examples:
+  - Linear Product Engineer
+  - Vercel Full-Stack Engineer
+  - Figma Product SWE
+  - Ramp Product Engineer
+  - Notion SWE
+aliases:
+  - Full Stack Engineer
+  - Full-Stack Engineer
+  - Fullstack Engineer
+  - Senior Full Stack Engineer
+  - Product Engineer
+  - Senior Product Engineer
+  - Full Stack Software Engineer
+  - Product Software Engineer
+  - Frontend Software Engineer
+  - Senior Frontend Engineer
+  - UI Platform Engineer
+description: 2–6 YoE · End-to-end TypeScript/React web interfaces, backend APIs & rapid customer-facing product iteration
+target_yoe_range:
+  - 2
+  - 6
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.3
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - typescript
+    - javascript
+    - react
+    - next.js
+    - node.js
+    - python
+    - rest api
+    - graphql
+    - postgresql
+    - html
+    - css
+    - sql
+  important_systems:
+    - state management
+    - web performance
+    - accessibility
+    - testing
+    - playwright
+    - docker
+    - ci/cd
+    - caching
+    - authentication
+    - design systems
+  senior_leadership:
+    - product sense
+    - ux collaboration
+    - cross-functional
+    - ownership
+    - mentorship
+  bonus_nice_to_have:
+    - tailwind
+    - redis
+    - websockets
+    - aws
+    - fastapi

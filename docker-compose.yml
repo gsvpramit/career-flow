@@ -1,9 +1,64 @@
 services:
+  careerflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: careerflow_app
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      CAREERFLOW_CONFIG_DIR: /app/config
+      CAREERFLOW_DATA_DIR: /app/data
+      CAREERFLOW_OUTPUT_DIR: /app/output
+      CAREERFLOW_DB_PATH: /app/data/job_mark1.db
+      CAREERFLOW_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./output:/app/output
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 2.0
+    restart: unless-stopped
+    networks:
+      - careerflow_net
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: careerflow_tunnel
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate --url http://careerflow:8000
+    depends_on:
+      careerflow:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    pids_limit: 64
+    mem_limit: 256m
+    restart: unless-stopped
+    networks:
+      - careerflow_net
+
   ollama:
     image: ollama/ollama:latest
     container_name: job_mark1_ollama
+    profiles: ["gpu-ollama"]
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     deploy:
@@ -14,6 +69,10 @@ services:
               count: all
               capabilities: [gpu]
     restart: unless-stopped
+
+networks:
+  careerflow_net:
+    driver: bridge
 
 volumes:
   ollama_data:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -14,13 +14,25 @@ class Base(DeclarativeBase):
 
 
 def build_engine(db_path: Path) -> Engine:
-    """Create a SQLite engine ensuring parent directories exist."""
+    """Create a SQLite engine ensuring parent directories exist and WAL mode is active."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(
+    engine = create_engine(
         f"sqlite:///{db_path.as_posix()}",
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False, "timeout": 60.0},
         future=True,
     )
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            cursor.execute("PRAGMA synchronous=NORMAL;")
+            cursor.execute("PRAGMA busy_timeout=60000;")
+        finally:
+            cursor.close()
+
+    return engine
 
 
 def build_session_factory(engine: Engine) -> sessionmaker[Session]:

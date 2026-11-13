@@ -120,3 +120,49 @@ class ResumeRecordResponse(BaseModel):
     raw_text: str = ""
     created_at: datetime
     updated_at: datetime
+
+
+class BootstrapEmployerInput(BaseModel):
+    """Single work history employer entry for custom base resume creation."""
+
+    company: str
+    title: Optional[str] = None
+    location: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    bullets_count: Optional[int] = Field(default=None, ge=2, le=12)
+
+
+class ResumeBootstrapRequest(BaseModel):
+    """Minimal user inputs to auto-generate a realistic, quantified generic base resume."""
+
+    full_name: str = "Alex Rivera"
+    email: str = "alex.rivera.eng@example.com"
+    phone: str = "+1 (555) 234-8910"
+    location: str = "New York, NY"
+    role_track: str = "senior_swe"
+    years_experience: int = Field(default=5, ge=1, le=20)
+    focus_skills: list[str] = Field(default_factory=list)
+    employers: list[BootstrapEmployerInput] = Field(default_factory=list)
+    recent_company: Optional[str] = None
+    prior_company: Optional[str] = None
+    graduate_degree: Optional[str] = None
+    undergrad_degree: Optional[str] = None
+    bullets_per_experience: int = Field(default=5, ge=2, le=12)
+    bullets_per_role_counts: Optional[list[int]] = None
+    projects_count: int = Field(default=2, ge=2, le=5)
+    page_budget: float = Field(default=1.5, ge=1.0, le=4.0)
+    job_id: Optional[int] = None
+    use_llm: bool = True
+    save_as_base: bool = True
+    resume_name: Optional[str] = None
+
+
+class ResumeBootstrapResponse(BaseModel):
+    """Created generic base resume plus generation & humanizer metadata."""
+
+    resume: ResumeRecordResponse
+    generation_mode: Literal["ollama_llm", "deterministic_template"]
+    model_used: Optional[str] = None
+    humanized_count: int = 0
+    notes: list[str] = Field(default_factory=list)

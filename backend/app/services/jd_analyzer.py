@@ -6,6 +6,8 @@ import re
 
 from backend.app.schemas.config import AppSettings, RoleTrackConfig
 from backend.app.schemas.job import JobAnalysis, SalaryInfo, WeightedSkill, YoeInfo
+from backend.app.services.label_formatter import format_skill_name
+from backend.app.services.skill_enrichment import enrich_job_weighted_skills, is_non_work_jd_line
 
 TIER_LABELS = {
     "core_must_have": "Must-Have",
@@ -288,8 +290,12 @@ def extract_work_auth(text: str) -> str:
     return "unspecified"
 
 
-def extract_yoe(text: str, target_min: int = 4, target_max: int = 8) -> YoeInfo:
-    """Extract required years of experience and evaluate overlap with target 4-8 YoE range."""
+def extract_yoe(
+    text: str,
+    target_min: int | None = 4,
+    target_max: int | None = 8,
+) -> YoeInfo:
+    """Extract required years of experience and evaluate overlap with optional YoE bounds."""
     range_match = re.search(
         r"(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*\+?\s*years?(?:\s+of)?\s+(?:[a-z\s]{0,25})?experience",
         text,
@@ -297,12 +303,13 @@ def extract_yoe(text: str, target_min: int = 4, target_max: int = 8) -> YoeInfo:
     )
     if range_match:
         low, high = int(range_match.group(1)), int(range_match.group(2))
-        fits = (low <= target_max) and (high >= target_min)
+        fits_max = True if target_max is None else (low <= target_max)
+        fits_min = True if target_min is None else (high >= target_min)
         return YoeInfo(
             min_years=low,
             max_years=high,
             raw_snippet=range_match.group(0).strip(),
-            fits_target_range=fits,
+            fits_target_range=fits_max and fits_min,
         )
 
     min_match = re.search(
@@ -312,12 +319,13 @@ def extract_yoe(text: str, target_min: int = 4, target_max: int = 8) -> YoeInfo:
     )
     if min_match:
         low = int(min_match.group(1))
-        fits = low <= target_max and (low >= target_min - 1)
+        fits_max = True if target_max is None else (low <= target_max)
+        fits_min = True if target_min is None else (low >= target_min - 1)
         return YoeInfo(
             min_years=low,
             max_years=None,
             raw_snippet=min_match.group(0).strip(),
-            fits_target_range=fits,
+            fits_target_range=fits_max and fits_min,
         )
 
     return YoeInfo()
@@ -391,7 +399,7 @@ def _extract_expected_work(sections: dict[str, str], raw_text: str) -> list[str]
     expectations: list[str] = []
     for line in source.splitlines():
         cleaned = re.sub(r"^[\-\*•\u2022\d\.)\s]+", "", line).strip()
-        if 25 <= len(cleaned) <= 220 and not cleaned.lower().startswith(("equal opportunity", "benefits")):
+        if 25 <= len(cleaned) <= 220 and not is_non_work_jd_line(cleaned):
             expectations.append(cleaned)
         if len(expectations) >= 8:
             break
@@ -459,7 +467,7 @@ def analyze_job_posting(
             )
             weighted_skills.append(
                 WeightedSkill(
-                    keyword=kw,
+                    keyword=format_skill_name(kw),
                     tier=tier,  # type: ignore[arg-type]
                     priority_label=TIER_LABELS[tier],
                     weight=effective_weight,
@@ -468,7 +476,7 @@ def analyze_job_posting(
                 )
             )
 
-    weighted_skills.sort(key=lambda item: (-item.weight, -item.jd_mentions, item.keyword.lower()))
+    weighted_skills = enrich_job_weighted_skills(raw_text, weighted_skills)
     detected_signals = [sig for sig in SENIOR_SIGNALS if _keyword_pattern(sig).search(raw_text)]
     expected_work = _extract_expected_work(sections, raw_text)
     work_type = extract_work_type(raw_text, location)

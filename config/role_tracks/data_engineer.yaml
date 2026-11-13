@@ -1,15 +1,24 @@
 id: data_engineer
 display_name: Data & AI Pipeline Engineer
+category: ai_data
+typical_yoe_label: 3–7 yrs
+search_query: Data Engineer
+company_examples:
+  - Databricks Data Engineer
+  - Stripe Data Platform
+  - Snowflake Pipeline Engineer
+  - Airbnb Data Engineer
 aliases:
+  - Data Engineer
   - Senior Data Engineer
-  - Staff Data Engineer
   - Data Platform Engineer
   - Streaming Data Engineer
   - Analytics Infrastructure Engineer
-description: 4-8 YoE distributed ETL/ELT pipelines, lakehouse architectures, and streaming analytics
+  - AI Data Engineer
+description: 3–7 YoE · Distributed ETL/ELT pipelines, Apache Spark, Kafka, Iceberg/Delta Lake & analytical warehousing
 target_yoe_range:
-  - 4
-  - 8
+  - 3
+  - 7
 weights:
   core_must_have: 3.0
   important_systems: 2.0

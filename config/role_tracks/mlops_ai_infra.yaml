@@ -1,0 +1,73 @@
+id: mlops_ai_infra
+display_name: MLOps / AI Infrastructure Engineer
+category: ai_data
+typical_yoe_label: 3–8 yrs
+search_query: MLOps AI Infrastructure Engineer
+company_examples:
+  - OpenAI Compute / Inference Infra
+  - xAI GPU Systems MTS
+  - Anyscale Ray Engineer
+  - Databricks MLOps
+  - Weights & Biases Platform
+aliases:
+  - MLOps Engineer
+  - Senior MLOps Engineer
+  - AI Infrastructure Engineer
+  - ML Infrastructure Engineer
+  - ML Platform Engineer
+  - AI Platform Engineer
+  - LLMOps Engineer
+  - Inference Engineer
+  - GPU Infrastructure Engineer
+  - Model Serving Engineer
+description: 3–8 YoE · GPU cluster orchestration, vLLM/TensorRT inference serving, training pipelines, feature stores & ML CI/CD
+target_yoe_range:
+  - 3
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.2
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - kubernetes
+    - docker
+    - pytorch
+    - vllm
+    - tensorrt
+    - triton
+    - gpu
+    - cuda
+    - model serving
+    - mlops
+    - ray
+    - ci/cd
+    - distributed training
+  important_systems:
+    - slurm
+    - feature store
+    - mlflow
+    - quantization
+    - throughput
+    - latency
+    - observability
+    - prometheus
+    - grafana
+    - terraform
+    - aws
+    - gcp
+  senior_leadership:
+    - architecture
+    - reliability
+    - cost optimization
+    - capacity planning
+    - mentorship
+  bonus_nice_to_have:
+    - go
+    - rust
+    - onnx
+    - sglang
+    - infiniband
+    - nccl

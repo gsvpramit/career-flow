@@ -1,0 +1,72 @@
+id: backend_systems
+display_name: Backend / Distributed Systems Engineer
+category: engineering_specialty
+typical_yoe_label: 3–7 yrs
+search_query: Backend Software Engineer
+company_examples:
+  - Stripe Core Payments SWE
+  - Cloudflare Systems Engineer
+  - Coinbase Backend IC4/IC5
+  - Databricks Distributed Systems
+aliases:
+  - Backend Engineer
+  - Senior Backend Engineer
+  - Backend Software Engineer
+  - Distributed Systems Engineer
+  - Core Infrastructure Engineer
+  - API Engineer
+  - Microservices Engineer
+  - Systems Software Engineer
+  - Payments Engineer
+  - Storage Systems Engineer
+description: 3–7 YoE · High-throughput APIs, distributed consensus, databases, caching, event streaming & reliability
+target_yoe_range:
+  - 3
+  - 7
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - go
+    - java
+    - rust
+    - c++
+    - distributed systems
+    - microservices
+    - rest api
+    - grpc
+    - postgresql
+    - redis
+    - kafka
+    - docker
+    - kubernetes
+    - aws
+    - gcp
+  important_systems:
+    - system design
+    - concurrency
+    - high availability
+    - fault tolerance
+    - sharding
+    - caching
+    - idempotency
+    - observability
+    - latency
+    - throughput
+  senior_leadership:
+    - architecture
+    - rfc
+    - mentorship
+    - on-call
+    - slo
+    - ownership
+  bonus_nice_to_have:
+    - graphql
+    - dynamodb
+    - clickhouse
+    - elasticsearch
+    - terraform

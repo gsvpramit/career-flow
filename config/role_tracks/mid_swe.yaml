@@ -1,0 +1,79 @@
+id: mid_swe
+display_name: Mid-Level Software Engineer
+category: swe_levels
+typical_yoe_label: 2–5 yrs
+search_query: Software Engineer II
+company_examples:
+- Google L4
+- Meta E4
+- Databricks L4
+- Coinbase IC4
+- Stripe L3 SWE
+- Anthropic MTS
+aliases:
+- Software Engineer II
+- SWE II
+- SWE 2
+- Software Development Engineer II
+- L4 Software Engineer
+- E4 Software Engineer
+- IC4 Software Engineer
+- ICT3 Software Engineer
+- Level 63 Software Engineer
+- Level 64 Software Engineer
+- Stripe L3 Software Engineer
+- Member of Technical Staff
+- Software Engineer
+- Application Engineer
+description: 2–5 YoE · Google L4, Meta E4, Databricks L4, Stripe L3, Coinbase IC4,
+  Anthropic MTS — independent feature delivery & service design
+target_yoe_range:
+- 2
+- 5
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.2
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+  - python
+  - go
+  - java
+  - typescript
+  - c++
+  - rest api
+  - postgresql
+  - sql
+  - microservices
+  - docker
+  - kubernetes
+  - aws
+  - gcp
+  - unit testing
+  important_systems:
+  - system design
+  - redis
+  - kafka
+  - observability
+  - ci/cd
+  - caching
+  - concurrency
+  - code review
+  - latency
+  - react
+  - Apache Spark
+  - Generative AI
+  - on-call
+  senior_leadership:
+  - ownership
+  - cross-functional
+  - collaboration
+  - design docs
+  - on-call
+  bonus_nice_to_have:
+  - grpc
+  - terraform
+  - graphql
+  - elasticsearch
+  - spark

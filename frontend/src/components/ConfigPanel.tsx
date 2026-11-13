@@ -1,11 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import type { AppSettingsValues, ConfigResponse, RoleTrackConfig } from "../types";
+import {
+  buildAvoidedWordsGroups,
+  DEFAULT_AVOIDED_AI_WORDS,
+  formatJobTypeLabel,
+  formatSourceLabel,
+  formatWorkTypeLabel,
+} from "../constants/tailoring";
+import { MultiSelectCheckboxDropdown } from "./MultiSelectCheckboxDropdown";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import type {
+  AppSettingsValues,
+  ConfigResponse,
+  LlmBenchmarkResponse,
+  LlmStatusResponse,
+  LlmTestResponse,
+  LocationCatalogResponse,
+  RoleTrackConfig,
+} from "../types";
 
 interface ConfigPanelProps {
   config: ConfigResponse | null;
   roleTracks: RoleTrackConfig[];
   onUpdated: () => Promise<void>;
+  onDataFlushed?: () => Promise<void>;
 }
 
 function parseListInput(raw: string): string[] {
@@ -15,8 +33,16 @@ function parseListInput(raw: string): string[] {
     .filter(Boolean);
 }
 
-export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps) {
+function parseLineInput(raw: string): string[] {
+  return raw
+    .split(/[\n;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function ConfigPanel({ config, roleTracks, onUpdated, onDataFlushed }: ConfigPanelProps) {
   const [draft, setDraft] = useState<AppSettingsValues | null>(null);
+  const [locCatalog, setLocCatalog] = useState<LocationCatalogResponse | null>(null);
   const [locInput, setLocInput] = useState("");
   const [boardsInput, setBoardsInput] = useState("");
   const [blocklistInput, setBlocklistInput] = useState("");
@@ -26,14 +52,48 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
   const [coreKwText, setCoreKwText] = useState("");
   const [sysKwText, setSysKwText] = useState("");
 
+  // Granular & Master Flush controls
+  const [flushSessions, setFlushSessions] = useState(true);
+  const [flushRuns, setFlushRuns] = useState(true);
+  const [flushOutputs, setFlushOutputs] = useState(true);
+  const [flushSeen, setFlushSeen] = useState(true);
+  const [seenScope, setSeenScope] = useState<"all" | "discarded" | "auto_filtered">("all");
+  const [flushResumes, setFlushResumes] = useState(false);
+  const [confirmMode, setConfirmMode] = useState<"none" | "master" | "selective">("none");
+
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [llmStatus, setLlmStatus] = useState<LlmStatusResponse | null>(null);
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmTestResult, setLlmTestResult] = useState<LlmTestResponse | null>(null);
+  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [benchmarkResult, setBenchmarkResult] = useState<LlmBenchmarkResponse | null>(null);
+  const [benchmarkCollapsed, setBenchmarkCollapsed] = useState(false);
+
+  const [newBoardProvider, setNewBoardProvider] = useState<"greenhouse" | "lever" | "ashby">("greenhouse");
+  const [newBoardSlug, setNewBoardSlug] = useState("");
+  const [showRawBoards, setShowRawBoards] = useState(false);
+  const [customAvoidedWord, setCustomAvoidedWord] = useState("");
+
+  const refreshLlmStatus = async () => {
+    try {
+      const st = await api.getLlmStatus();
+      setLlmStatus(st);
+    } catch {
+      // keep existing status
+    }
+  };
+
+  useEffect(() => {
+    void api.getLocations().then(setLocCatalog).catch(() => {});
+    void refreshLlmStatus();
+  }, []);
 
   useEffect(() => {
     if (!config) return;
     setDraft(config.values);
-    setLocInput(config.values.target_locations.join(", "));
+    setLocInput(config.values.target_locations.join("\n"));
     setBoardsInput(config.values.company_boards.join("\n"));
     setBlocklistInput(config.values.title_blocklist.join(", "));
   }, [config]);
@@ -47,12 +107,85 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
     setSysKwText((track.keywords.important_systems || []).join(", "));
   }, [roleTracks, selectedTrackId]);
 
+  const locationGroups = useMemo(() => {
+    const top20 = locCatalog?.top_20 ?? [
+      "Seattle, WA",
+      "San Francisco, CA",
+      "New York, NY",
+      "San Jose, CA",
+      "Austin, TX",
+      "San Diego, CA",
+      "Boston, MA",
+      "Los Angeles, CA",
+      "Remote",
+    ];
+    const otherUs = locCatalog?.other_us ?? [];
+    const groups = [
+      {
+        title: "Top 20 US Tech Cities",
+        items: top20.map((city) => ({ value: city, label: city })),
+      },
+    ];
+    if (otherUs.length > 0) {
+      groups.push({
+        title: "All US Tech Cities (A-Z)",
+        items: otherUs.map((city) => ({ value: city, label: city })),
+      });
+    }
+    return groups;
+  }, [locCatalog]);
+
+  const parsedLocations = useMemo(() => parseLineInput(locInput), [locInput]);
+
+  const parsedBoards = useMemo(() => {
+    return boardsInput
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const parts = line.split(":");
+        const provider = parts.length > 1 ? parts[0].trim().toLowerCase() : "greenhouse";
+        const slug = parts.length > 1 ? parts.slice(1).join(":").trim() : parts[0].trim();
+        return { line, provider, slug };
+      });
+  }, [boardsInput]);
+
   if (!config || !draft) {
     return <div className="card muted">Loading configuration...</div>;
   }
 
   const toggleArrayValue = <T extends string>(arr: T[], val: T): T[] =>
     arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+
+  const handleAddBoard = () => {
+    const slug = newBoardSlug.trim().toLowerCase();
+    if (!slug) return;
+    const line = `${newBoardProvider}:${slug}`;
+    if (!boardsInput.includes(line)) {
+      const next = boardsInput ? `${boardsInput}\n${line}` : line;
+      setBoardsInput(next);
+    }
+    setNewBoardSlug("");
+  };
+
+  const handleRemoveBoard = (lineToRemove: string) => {
+    const next = boardsInput
+      .split("\n")
+      .filter((l) => l.trim() !== lineToRemove)
+      .join("\n");
+    setBoardsInput(next);
+  };
+
+  const handleAddCustomAvoidedWord = () => {
+    const word = customAvoidedWord.trim().toLowerCase();
+    if (!word || !draft) return;
+    const current = draft.avoided_ai_words ?? DEFAULT_AVOIDED_AI_WORDS;
+    if (!current.includes(word)) {
+      setDraft({ ...draft, avoided_ai_words: [...current, word] });
+      setNotice(`Added blocked word "${word}". Click 'Save Settings' to persist.`);
+    }
+    setCustomAvoidedWord("");
+  };
 
   const handleSaveSettings = async () => {
     setSaving(true);
@@ -61,13 +194,19 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
     try {
       await api.updateConfig({
         target_role_tracks: draft.target_role_tracks,
-        target_locations: parseListInput(locInput),
+        target_locations: parseLineInput(locInput),
         work_types: draft.work_types,
         job_types: draft.job_types,
         work_authorization: draft.work_authorization,
         posted_within_default: draft.posted_within_default,
-        target_yoe_min: Number(draft.target_yoe_min),
-        target_yoe_max: Number(draft.target_yoe_max),
+        target_yoe_min:
+          draft.target_yoe_min === null || Number.isNaN(draft.target_yoe_min)
+            ? null
+            : Number(draft.target_yoe_min),
+        target_yoe_max:
+          draft.target_yoe_max === null || Number.isNaN(draft.target_yoe_max)
+            ? null
+            : Number(draft.target_yoe_max),
         target_salary_min:
           draft.target_salary_min === null || Number.isNaN(draft.target_salary_min)
             ? null
@@ -83,11 +222,17 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
         resume_filename_format: draft.resume_filename_format.trim() || "{full_name}_{company}_{role}",
         export_formats: draft.export_formats,
         page_budget: Number(draft.page_budget),
+        default_bullets_per_role: Number(draft.default_bullets_per_role || 5),
+        avoided_ai_words: draft.avoided_ai_words ?? DEFAULT_AVOIDED_AI_WORDS,
+        custom_tailor_instructions: draft.custom_tailor_instructions || "",
         llm_mode: draft.llm_mode || "off",
-        llm_model: draft.llm_model,
+        llm_model: (draft.llm_model || "").trim() || "mistral-nemo:latest",
+        ollama_base_url: (draft.ollama_base_url || "").trim() || "http://localhost:11434",
+        strict_humanizer_gate: Boolean(draft.strict_humanizer_gate),
       });
       await onUpdated();
-      setNotice("Settings saved and synced to config/settings.yaml.");
+      await refreshLlmStatus();
+      setNotice("Settings saved and applied.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings.");
     } finally {
@@ -119,17 +264,34 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
     }
   };
 
-  const handleClearSeen = async (scope: "discarded" | "auto_filtered") => {
+  const handleFlushData = async (mode: "master" | "selective") => {
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await api.clearSeenHistory(scope);
+      const res = await api.flushData(
+        mode === "master"
+          ? { master_flush: true }
+          : {
+              master_flush: false,
+              flush_sessions_and_jobs: flushSessions,
+              flush_tailoring_runs: flushRuns,
+              flush_output_files: flushOutputs,
+              flush_seen_history: flushSeen,
+              seen_scope: seenScope,
+              flush_resumes: flushResumes,
+            }
+      );
+      setConfirmMode("none");
+      if (onDataFlushed) {
+        await onDataFlushed();
+      }
       setNotice(
-        `Cleared ${res.cleared} ${scope === "discarded" ? "manually discarded" : "auto-filtered"} ledger entries.`
+        `Flushed: ${res.sessions_deleted} sessions, ${res.jobs_deleted} jobs, ${res.tailoring_runs_deleted} tailoring runs, ${res.seen_deleted} seen entries, ${res.output_items_deleted} output items` +
+          (res.resumes_deleted > 0 ? `, ${res.resumes_deleted} resumes.` : " (resumes & config preserved).")
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to clear ledger.");
+      setError(err instanceof Error ? err.message : "Failed to flush data.");
     } finally {
       setSaving(false);
     }
@@ -141,7 +303,7 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
         <div>
           <h2 style={{ margin: 0, fontSize: 18 }}>Config</h2>
           <div className="muted">
-            Synced with <span className="mono">{config.config_path}</span>. Filters apply inline while scraping.
+            Filters, recruiting sources, and tailoring controls apply inline during scraping and tailoring.
           </div>
         </div>
         <button
@@ -149,7 +311,7 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
           onClick={() => void handleSaveSettings()}
           disabled={saving}
         >
-          {saving ? "Saving..." : "Save Settings to YAML"}
+          {saving ? "Saving..." : "Save Settings"}
         </button>
       </div>
 
@@ -157,39 +319,171 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
       {notice && <div className="alert alert-success">{notice}</div>}
 
       <div className="report-grid">
-        <div className="card stack-md">
-          <h3 style={{ margin: 0, fontSize: 15 }}>Target Roles & Locations</h3>
+        <div className="card stack-md" style={{ overflow: "hidden" }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>Target Role Tracks</h3>
 
-          <div>
-            <label>Target Role Tracks (pulled by default when scraping)</label>
-            <div className="row-wrap">
-              {roleTracks.map((t) => {
-                const selected = draft.target_role_tracks.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={`chip ${selected ? "selected" : ""}`}
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        target_role_tracks: toggleArrayValue(draft.target_role_tracks, t.id),
-                      })
-                    }
-                  >
-                    {t.display_name}
-                  </button>
-                );
-              })}
+          <div className="stack-sm">
+            <div className="row-between">
+              <label style={{ marginBottom: 0 }}>
+                Target Role Tracks (with typical company YoE expectations)
+              </label>
+              <div className="row-wrap">
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      target_role_tracks: roleTracks
+                        .filter((t) => t.id === "mid_swe" || t.id === "senior_swe")
+                        .map((t) => t.id),
+                    })
+                  }
+                >
+                  Mid + Senior (2–8 yrs)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      target_role_tracks: roleTracks
+                        .filter((t) => t.id === "staff_swe" || t.id === "principal_swe")
+                        .map((t) => t.id),
+                    })
+                  }
+                >
+                  Staff+ (8+ yrs)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    const dataTracks = ["data_engineer", "data_scientist", "ai_engineer", "ml_engineer", "mlops_ai_infra"];
+                    setDraft({
+                      ...draft,
+                      target_role_tracks: roleTracks
+                        .filter((t) => dataTracks.includes(t.id))
+                        .map((t) => t.id),
+                    });
+                  }}
+                >
+                  Data &amp; AI (3–8 yrs)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      target_role_tracks: roleTracks.map((t) => t.id),
+                    })
+                  }
+                >
+                  All Roles
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label>Target Locations (comma-separated cities or Remote)</label>
-            <input
+            {[
+              { title: "Company Seniority Levels", key: "swe_levels" },
+              { title: "AI, Machine Learning & Data", key: "ai_data" },
+              { title: "Backend, Product, Startup, Field & Cloud", key: "engineering_specialty" },
+            ].map((grp) => {
+              const items = roleTracks.filter((t) =>
+                grp.key === "engineering_specialty"
+                  ? t.category !== "swe_levels" && t.category !== "ai_data"
+                  : t.category === grp.key
+              );
+              if (items.length === 0) return null;
+              return (
+                <div key={grp.key} className="stack-sm" style={{ gap: 6 }}>
+                  <div className="small-note" style={{ fontWeight: 700, textTransform: "uppercase" }}>
+                    {grp.title}
+                  </div>
+                  <div className="row-wrap">
+                    {items.map((t) => {
+                      const selected = draft.target_role_tracks.includes(t.id);
+                      const yoe =
+                        t.typical_yoe_label ||
+                        (t.target_yoe_range.length >= 2
+                          ? `${t.target_yoe_range[0]}–${t.target_yoe_range[1]} yrs`
+                          : "");
+                      const tooltip = [
+                        yoe ? `Typical YoE: ${yoe}` : "",
+                        t.company_examples?.length
+                          ? `Examples: ${t.company_examples.join(" · ")}`
+                          : "",
+                        t.description,
+                      ]
+                        .filter(Boolean)
+                        .join("\n");
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className={`chip ${selected ? "selected" : ""}`}
+                          title={tooltip}
+                          onClick={() =>
+                            setDraft({
+                              ...draft,
+                              target_role_tracks: toggleArrayValue(draft.target_role_tracks, t.id),
+                            })
+                          }
+                        >
+                          <span>{t.display_name}</span>
+                          {yoe && <span className="role-chip-yoe">({yoe})</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card stack-md" style={{ overflow: "hidden" }}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>Target Locations &amp; Filters</h3>
+
+          <div className="stack-sm">
+            <MultiSelectCheckboxDropdown
+              label="Target Locations (US Tech Hubs Picker)"
+              summaryText={
+                parsedLocations.includes("ALL_US")
+                  ? "All US Tech Cities"
+                  : parsedLocations.length === 0
+                  ? "Any Location (Select cities)"
+                  : `${parsedLocations.length} selected: ${parsedLocations.slice(0, 2).join(", ")}${
+                      parsedLocations.length > 2 ? "…" : ""
+                    }`
+              }
+              groups={locationGroups}
+              selected={parsedLocations}
+              onChange={(next) => setLocInput(next.join("\n"))}
+              searchPlaceholder="Search US city or state..."
+              quickActions={[
+                {
+                  label: "Top 20 Cities",
+                  onClick: () => setLocInput((locCatalog?.top_20 ?? []).join("\n")),
+                },
+                {
+                  label: "All US Cities",
+                  active: parsedLocations.includes("ALL_US"),
+                  onClick: () => setLocInput("ALL_US"),
+                },
+                {
+                  label: "Clear",
+                  onClick: () => setLocInput(""),
+                },
+              ]}
+            />
+            <AutoGrowTextarea
+              minHeight={52}
               value={locInput}
               onChange={(e) => setLocInput(e.target.value)}
-              placeholder="Seattle, WA, San Diego, CA, San Francisco, CA, Remote"
+              placeholder={"One location per line (e.g.\nSeattle, WA\nSan Francisco, CA\nRemote)"}
             />
           </div>
 
@@ -209,7 +503,7 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
                       })
                     }
                   >
-                    {wt}
+                    {formatWorkTypeLabel(wt)}
                   </button>
                 ))}
               </div>
@@ -230,7 +524,7 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
                       })
                     }
                   >
-                    {jt}
+                    {formatJobTypeLabel(jt)}
                   </button>
                 ))}
               </div>
@@ -274,32 +568,43 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
               </select>
             </div>
           </div>
-        </div>
-
-        <div className="card stack-md">
-          <h3 style={{ margin: 0, fontSize: 15 }}>Compensation, Experience & Quality Filters</h3>
 
           <div className="form-grid-2">
             <div>
-              <label>Min YoE</label>
+              <label>Min YoE (optional)</label>
               <input
                 type="number"
-                value={draft.target_yoe_min}
+                min={0}
+                max={20}
+                placeholder="Empty = no min YoE filter"
+                value={draft.target_yoe_min ?? ""}
                 onChange={(e) =>
-                  setDraft({ ...draft, target_yoe_min: Number(e.target.value || 0) })
+                  setDraft({
+                    ...draft,
+                    target_yoe_min: e.target.value === "" ? null : Number(e.target.value),
+                  })
                 }
               />
             </div>
             <div>
-              <label>Max YoE</label>
+              <label>Max YoE (optional)</label>
               <input
                 type="number"
-                value={draft.target_yoe_max}
+                min={0}
+                max={25}
+                placeholder="Empty = no max YoE filter"
+                value={draft.target_yoe_max ?? ""}
                 onChange={(e) =>
-                  setDraft({ ...draft, target_yoe_max: Number(e.target.value || 0) })
+                  setDraft({
+                    ...draft,
+                    target_yoe_max: e.target.value === "" ? null : Number(e.target.value),
+                  })
                 }
               />
             </div>
+          </div>
+          <div className="small-note">
+            Leave Min YoE or Max YoE empty to disable experience-year filtering during scrapes.
           </div>
 
           <div className="form-grid-3">
@@ -347,7 +652,8 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
 
           <div>
             <label>Title Blocklist (comma-separated excluded terms)</label>
-            <input
+            <AutoGrowTextarea
+              minHeight={42}
               value={blocklistInput}
               onChange={(e) => setBlocklistInput(e.target.value)}
               placeholder="intern, junior, entry level, director, recruiter"
@@ -361,89 +667,438 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
       </div>
 
       <div className="report-grid">
-        <div className="card stack-md">
-          <h3 style={{ margin: 0, fontSize: 15 }}>Job Sources & Company Boards</h3>
+        {/* Left Column: Job Sources + Local AI Engine + Blocked Words & Custom Instructions */}
+        <div className="stack-md">
+          {/* Card 1: Job Sources */}
+          <div className="card stack-md" style={{ overflow: "hidden" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Job Sources</h3>
 
-          <div>
-            <label>Active Scraper Sources</label>
-            <div className="row-wrap">
-              {(["greenhouse", "lever", "linkedin"] as const).map((src) => (
-                <button
-                  key={src}
-                  type="button"
-                  className={`chip ${draft.scraper_sources.includes(src) ? "selected" : ""}`}
-                  onClick={() =>
-                    setDraft({
-                      ...draft,
-                      scraper_sources: toggleArrayValue(draft.scraper_sources, src),
-                    })
-                  }
-                >
-                  {src}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label>Company ATS Boards (one per line: provider:slug)</label>
-            <textarea
-              rows={5}
-              value={boardsInput}
-              onChange={(e) => setBoardsInput(e.target.value)}
-              placeholder={"greenhouse:anthropic\ngreenhouse:databricks\nlever:palantir"}
-            />
-          </div>
-        </div>
-
-        <div className="card stack-md">
-          <h3 style={{ margin: 0, fontSize: 15 }}>Export Formatting & Assistant Mode</h3>
-
-          <div>
-            <label>Resume Filename Format (tokens: {"{full_name}, {company}, {role}, {location}"})</label>
-            <input
-              value={draft.resume_filename_format}
-              onChange={(e) =>
-                setDraft({ ...draft, resume_filename_format: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="form-grid-3">
             <div>
-              <label>Export Formats</label>
+              <label>Active Scraper Sources</label>
               <div className="row-wrap">
-                {(["pdf", "docx"] as const).map((fmt) => (
+                {(["linkedin", "greenhouse", "ashby", "lever"] as const).map((src) => (
                   <button
-                    key={fmt}
+                    key={src}
                     type="button"
-                    className={`chip ${draft.export_formats.includes(fmt) ? "selected" : ""}`}
+                    className={`chip ${draft.scraper_sources.includes(src) ? "selected" : ""}`}
                     onClick={() =>
                       setDraft({
                         ...draft,
-                        export_formats: toggleArrayValue(draft.export_formats, fmt),
+                        scraper_sources: toggleArrayValue(draft.scraper_sources, src),
                       })
                     }
                   >
-                    .{fmt}
+                    {formatSourceLabel(src)}
                   </button>
                 ))}
               </div>
             </div>
+
             <div>
-              <label>Page Budget</label>
-              <select
-                value={draft.page_budget}
-                onChange={(e) =>
-                  setDraft({ ...draft, page_budget: Number(e.target.value) })
-                }
-              >
-                <option value={1}>1 Page (Strict Senior)</option>
-                <option value={2}>Up to 2 Pages</option>
-              </select>
+              <div className="row-between" style={{ marginBottom: 6 }}>
+                <label style={{ marginBottom: 0 }}>Company ATS Boards ({parsedBoards.length} boards configured)</label>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => setShowRawBoards((v) => !v)}
+                >
+                  {showRawBoards ? "View as Badges" : "Edit as Raw Text"}
+                </button>
+              </div>
+
+              {!showRawBoards ? (
+                <div className="stack-sm">
+                  <div className="company-board-grid">
+                    {parsedBoards.length === 0 ? (
+                      <div className="small-note">No company boards added yet. Add below or paste raw lines.</div>
+                    ) : (
+                      parsedBoards.map((b) => (
+                        <div key={b.line} className="board-badge-chip">
+                          <span className={`board-provider-tag board-provider-${b.provider}`}>
+                            {b.provider}
+                          </span>
+                          <span style={{ fontWeight: 600 }}>{b.slug}</span>
+                          <button
+                            type="button"
+                            className="board-chip-remove"
+                            title={`Remove ${b.line}`}
+                            onClick={() => handleRemoveBoard(b.line)}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="row-wrap" style={{ gap: 6, alignItems: "center" }}>
+                    <select
+                      style={{ width: "auto", minWidth: 120 }}
+                      value={newBoardProvider}
+                      onChange={(e) =>
+                        setNewBoardProvider(e.target.value as "greenhouse" | "lever" | "ashby")
+                      }
+                    >
+                      <option value="greenhouse">Greenhouse</option>
+                      <option value="lever">Lever</option>
+                      <option value="ashby">Ashby</option>
+                    </select>
+                    <input
+                      style={{ flex: 1, minWidth: 160 }}
+                      value={newBoardSlug}
+                      onChange={(e) => setNewBoardSlug(e.target.value)}
+                      placeholder="Company slug (e.g. anthropic, stripe)"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddBoard();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={handleAddBoard}
+                    >
+                      + Add Board
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <AutoGrowTextarea
+                  minHeight={110}
+                  value={boardsInput}
+                  onChange={(e) => setBoardsInput(e.target.value)}
+                  placeholder={"greenhouse:anthropic\ngreenhouse:databricks\nlever:palantir"}
+                />
+              )}
             </div>
+          </div>
+
+          {/* Card 2: Local AI Engine */}
+          <div className="card stack-sm" style={{ overflow: "hidden" }}>
+            <div className="row-between">
+              <div>
+                <strong style={{ fontSize: 14 }}>Local AI Engine</strong>
+                <div className="small-note">
+                  Local open-source model handles XYZ resume tailoring, 5-year generation, and humanization.
+                </div>
+              </div>
+              <div className="row-wrap">
+                {llmStatus && (
+                  <span className={`pill ${llmStatus.reachable ? "pill-green" : "pill-amber"}`}>
+                    {llmStatus.reachable
+                      ? `Connected · ${llmStatus.available_models.length} model(s)`
+                      : "Ollama Offline / Unreachable"}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={llmBusy}
+                  onClick={async () => {
+                    setLlmBusy(true);
+                    setLlmTestResult(null);
+                    await refreshLlmStatus();
+                    setLlmBusy(false);
+                  }}
+                >
+                  Refresh Models
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  disabled={llmBusy || benchmarkBusy}
+                  onClick={async () => {
+                    setLlmBusy(true);
+                    setError(null);
+                    try {
+                      const res = await api.testLlm(draft.llm_model, draft.ollama_base_url);
+                      setLlmTestResult(res);
+                    } catch (err) {
+                      setLlmTestResult({
+                        ok: false,
+                        model: draft.llm_model,
+                        latency_ms: 0,
+                        sample_output: "",
+                        error: err instanceof Error ? err.message : "Test failed.",
+                      });
+                    } finally {
+                      setLlmBusy(false);
+                    }
+                  }}
+                >
+                  {llmBusy ? "Testing..." : "Test Model"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={llmBusy || benchmarkBusy}
+                  onClick={async () => {
+                    setBenchmarkBusy(true);
+                    setError(null);
+                    try {
+                      const res = await api.benchmarkLlm(null, draft.ollama_base_url);
+                      setBenchmarkResult(res);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Model benchmark failed.");
+                    } finally {
+                      setBenchmarkBusy(false);
+                    }
+                  }}
+                >
+                  {benchmarkBusy ? "Benchmarking..." : "Rank Models"}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-grid-3">
+              <div>
+                <label>Active Model</label>
+                {llmStatus?.available_models.length ? (
+                  <select
+                    value={
+                      llmStatus.available_models.includes(draft.llm_model)
+                        ? draft.llm_model
+                        : "__custom__"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value !== "__custom__") {
+                        setDraft({ ...draft, llm_model: e.target.value });
+                      }
+                    }}
+                  >
+                    {llmStatus.available_models.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                        {m === llmStatus.recommended_model ? " (Recommended)" : ""}
+                      </option>
+                    ))}
+                    {!llmStatus.available_models.includes(draft.llm_model) && (
+                      <option value="__custom__">Custom: {draft.llm_model}</option>
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    value={draft.llm_model}
+                    onChange={(e) => setDraft({ ...draft, llm_model: e.target.value })}
+                    placeholder="mistral-nemo:latest"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label>Ollama Endpoint</label>
+                <input
+                  value={draft.ollama_base_url}
+                  onChange={(e) => setDraft({ ...draft, ollama_base_url: e.target.value })}
+                  placeholder="http://localhost:11434"
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+                <label className="checkbox-row" style={{ margin: 0, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.strict_humanizer_gate)}
+                    onChange={(e) =>
+                      setDraft({ ...draft, strict_humanizer_gate: e.target.checked })
+                    }
+                  />
+                  <span>Anti-AI Humanizer</span>
+                </label>
+              </div>
+            </div>
+
+            {llmTestResult && (
+              <div className={`alert ${llmTestResult.ok ? "alert-success" : "alert-error"}`}>
+                {llmTestResult.ok ? (
+                  <div>
+                    ✓ Model <strong>{llmTestResult.model}</strong> is active and responsive (
+                    <strong>{llmTestResult.latency_ms}ms</strong>). Generated Google XYZ bullet:
+                    <div style={{ marginTop: 6, fontStyle: "italic", fontSize: 13, background: "rgba(0,0,0,0.25)", padding: "6px 10px", borderRadius: 4 }}>
+                      "{llmTestResult.sample_output}"
+                    </div>
+                  </div>
+                ) : (
+                  <>Test failed for {llmTestResult.model}: {llmTestResult.error}</>
+                )}
+              </div>
+            )}
+
+            {benchmarkResult && (
+              <div className="card stack-sm" style={{ padding: 12 }}>
+                <div className="row-between" style={{ alignItems: "center" }}>
+                  <div className="row-wrap" style={{ alignItems: "center", gap: 8 }}>
+                    <strong style={{ fontSize: 13 }}>
+                      Model Benchmark &amp; Ranking
+                    </strong>
+                    {benchmarkResult.recommended_model && (
+                      <span className="pill pill-green">
+                        Top Pick: {benchmarkResult.recommended_model}
+                      </span>
+                    )}
+                  </div>
+                  <div className="row-wrap" style={{ gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => setBenchmarkCollapsed((v) => !v)}
+                    >
+                      {benchmarkCollapsed ? "▸ Expand Benchmark" : "▾ Collapse Benchmark"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => setBenchmarkResult(null)}
+                      title="Dismiss benchmark table"
+                      style={{ padding: "2px 8px" }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+                {!benchmarkCollapsed && (
+                  !benchmarkResult.reachable ? (
+                    <div className="small-note">
+                      Ollama endpoint {benchmarkResult.base_url} is not reachable.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Rank</th>
+                            <th>Model</th>
+                            <th>Score</th>
+                            <th>Speed</th>
+                            <th>JSON / Completeness</th>
+                            <th>Stack Accuracy</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {benchmarkResult.items.map((item) => {
+                            const isActive = draft.llm_model === item.model;
+                            return (
+                              <tr key={item.model}>
+                                <td className="mono">
+                                  <strong>#{item.rank}</strong>
+                                </td>
+                                <td>
+                                  <strong>{item.model}</strong>
+                                  {item.rank === 1 && item.ok && (
+                                    <span className="pill pill-green" style={{ marginLeft: 6 }}>
+                                      Top Pick
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="mono">
+                                  <strong>{item.score.toFixed(1)}</strong>/100
+                                </td>
+                                <td className="mono">{(item.latency_ms / 1000).toFixed(1)}s</td>
+                                <td>
+                                  <span className={`pill ${item.schema_complete ? "pill-green" : item.json_valid ? "pill-blue" : "pill-amber"}`}>
+                                    {item.schema_complete ? "Full Schema" : item.json_valid ? "Valid JSON" : "Failed"}
+                                  </span>
+                                </td>
+                                <td className="small-note">{item.notes}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className={`btn btn-sm ${isActive ? "" : "btn-primary"}`}
+                                    disabled={isActive || !item.ok}
+                                    onClick={() => {
+                                      setDraft({ ...draft, llm_model: item.model });
+                                      setNotice(`Selected '${item.model}' (Rank #${item.rank}). Click Save Settings to persist.`);
+                                    }}
+                                  >
+                                    {isActive ? "Active" : "Use Model"}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Export Settings + Blocked Words + Reset Workspace */}
+        <div className="stack-md">
+          {/* Card 1: Export Settings */}
+          <div className="card stack-md" style={{ overflow: "hidden" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Export Settings</h3>
+
             <div>
-              <label>AI Layer Mode</label>
+              <label>Resume Filename Format (tokens: {"{full_name}, {company}, {role}, {location}"})</label>
+              <input
+                value={draft.resume_filename_format}
+                onChange={(e) =>
+                  setDraft({ ...draft, resume_filename_format: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="form-grid-3">
+              <div>
+                <label>Export Formats</label>
+                <div className="row-wrap">
+                  {(["pdf", "docx"] as const).map((fmt) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      className={`chip ${draft.export_formats.includes(fmt) ? "selected" : ""}`}
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          export_formats: toggleArrayValue(draft.export_formats, fmt),
+                        })
+                      }
+                    >
+                      .{fmt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label>Pages</label>
+                <select
+                  value={draft.page_budget}
+                  onChange={(e) =>
+                    setDraft({ ...draft, page_budget: Number(e.target.value) })
+                  }
+                >
+                  <option value={1}>1 Page (Strict Senior)</option>
+                  <option value={1.5}>1.5 Pages (Balanced)</option>
+                  <option value={2}>Up to 2 Pages</option>
+                  <option value={3}>3 Pages (Deep Tech)</option>
+                </select>
+              </div>
+              <div>
+                <label>Default Bullets / Experience</label>
+                <select
+                  value={draft.default_bullets_per_role || 5}
+                  onChange={(e) =>
+                    setDraft({ ...draft, default_bullets_per_role: Number(e.target.value) || 5 })
+                  }
+                >
+                  {[3, 4, 5, 6, 7, 8, 10].map((n) => (
+                    <option key={n} value={n}>
+                      {n} bullets / experience
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label>AI Engine</label>
               <select
                 value={draft.llm_mode || "off"}
                 onChange={(e) =>
@@ -453,84 +1108,289 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
                   })
                 }
               >
-                <option value="off">Deterministic Only (Fast)</option>
-                <option value="ollama_docker">Local Docker LLM (Qwen3 14B)</option>
+                <option value="ollama_local">Local Ollama AI (Single Model — Recommended)</option>
+                <option value="off">Deterministic Rules Only (Fast)</option>
+                <option value="ollama_docker">Local Docker AI (Ollama Container)</option>
               </select>
             </div>
           </div>
 
-          <div className="card-elevated row-between">
-            <div>
-              <strong style={{ fontSize: 13 }}>Deduplication History Reset</strong>
-              <div className="small-note">
-                Discarded and filtered jobs are permanently skipped across future sessions.
+          {/* Card 2: Blocked Words & Instructions */}
+          <div className="card stack-sm" style={{ overflow: "hidden" }}>
+            <strong style={{ fontSize: 14 }}>Blocked Words &amp; Instructions</strong>
+            <div className="form-grid-2" style={{ marginTop: 4 }}>
+              <div>
+                <MultiSelectCheckboxDropdown
+                  label="Blocked Words (uncheck any word to permit it)"
+                  summaryText={`${(draft.avoided_ai_words ?? DEFAULT_AVOIDED_AI_WORDS).length} blocked words active`}
+                  groups={buildAvoidedWordsGroups(draft.avoided_ai_words ?? DEFAULT_AVOIDED_AI_WORDS)}
+                  selected={draft.avoided_ai_words ?? DEFAULT_AVOIDED_AI_WORDS}
+                  onChange={(next) => setDraft({ ...draft, avoided_ai_words: next })}
+                  quickActions={[
+                    {
+                      label: "Recommended Banlist",
+                      onClick: () => setDraft({ ...draft, avoided_ai_words: [...DEFAULT_AVOIDED_AI_WORDS] }),
+                    },
+                    {
+                      label: "Allow All",
+                      onClick: () => setDraft({ ...draft, avoided_ai_words: [] }),
+                    },
+                  ]}
+                />
+                <div className="blocked-word-adder">
+                  <input
+                    value={customAvoidedWord}
+                    onChange={(e) => setCustomAvoidedWord(e.target.value)}
+                    placeholder="Add custom blocked word (e.g. spearheaded, synergy)"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCustomAvoidedWord();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={handleAddCustomAvoidedWord}
+                  >
+                    + Add Blocked Word
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="row-wrap">
-              <button
-                type="button"
-                className="btn btn-sm btn-danger-ghost"
-                onClick={() => void handleClearSeen("discarded")}
-                disabled={saving}
-              >
-                Reset Discarded
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => void handleClearSeen("auto_filtered")}
-                disabled={saving}
-              >
-                Reset Auto-Filtered
-              </button>
+              <div>
+                <label>Custom Instructions (sent to LLM)</label>
+                <AutoGrowTextarea
+                  minHeight={68}
+                  value={draft.custom_tailor_instructions || ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, custom_tailor_instructions: e.target.value })
+                  }
+                  placeholder="e.g., Emphasize distributed systems & GenAI APIs; keep tone concrete"
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="card stack-md">
+      {/* Reset Workspace (Full Width) */}
+      <div className="card stack-md" style={{ overflow: "hidden" }}>
         <div className="row-between">
           <div>
-            <h3 style={{ margin: 0, fontSize: 15 }}>Role Track Aliases & Weighted Keywords</h3>
+            <strong style={{ fontSize: 14 }}>Reset Workspace</strong>
             <div className="small-note">
-              Customize aliases (like SDE 2, Staff SWE) and skills persisted inside config/role_tracks/*.yaml.
+              Reset test runs cleanly. Master Flush wipes everything except saved resumes &amp; config.
             </div>
           </div>
-          <div style={{ minWidth: 240 }}>
+          {confirmMode === "master" ? (
+            <div className="row-wrap">
+              <button
+                type="button"
+                className="btn btn-sm btn-danger-ghost"
+                onClick={() => void handleFlushData("master")}
+                disabled={saving}
+              >
+                Confirm Master Flush
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setConfirmMode("none")}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-danger-ghost"
+              onClick={() => setConfirmMode("master")}
+              disabled={saving}
+            >
+              Master Flush (Keep Resumes)
+            </button>
+          )}
+        </div>
+
+        <div className="flush-grid">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={flushSessions}
+              onChange={(e) => setFlushSessions(e.target.checked)}
+            />
+            <span>Sessions &amp; Scraped Jobs</span>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={flushRuns}
+              onChange={(e) => setFlushRuns(e.target.checked)}
+            />
+            <span>Tailoring Runs</span>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={flushOutputs}
+              onChange={(e) => setFlushOutputs(e.target.checked)}
+            />
+            <span>Exported Output Files</span>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={flushSeen}
+              onChange={(e) => setFlushSeen(e.target.checked)}
+            />
+            <span>Seen / Dedup Ledger</span>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={flushResumes}
+              onChange={(e) => setFlushResumes(e.target.checked)}
+            />
+            <span>Saved Resumes</span>
+          </label>
+        </div>
+
+        <div className="row-between">
+          <div className="row-wrap">
+            {flushSeen && (
+              <div style={{ minWidth: 200 }}>
+                <select
+                  value={seenScope}
+                  onChange={(e) =>
+                    setSeenScope(e.target.value as "all" | "discarded" | "auto_filtered")
+                  }
+                >
+                  <option value="all">Seen Ledger: All</option>
+                  <option value="discarded">Seen Ledger: Discarded Only</option>
+                  <option value="auto_filtered">Seen Ledger: Auto-Filtered Only</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {confirmMode === "selective" ? (
+            <div className="row-wrap">
+              <button
+                type="button"
+                className="btn btn-sm btn-danger-ghost"
+                onClick={() => void handleFlushData("selective")}
+                disabled={saving}
+              >
+                Confirm Selected Flush
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setConfirmMode("none")}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={
+                saving ||
+                (!flushSessions && !flushRuns && !flushOutputs && !flushSeen && !flushResumes)
+              }
+              onClick={() => setConfirmMode("selective")}
+            >
+              Flush Selected Data
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="card stack-md" style={{ overflow: "hidden" }}>
+        <div className="row-between">
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              Track Aliases &amp; Keywords
+            </h3>
+            <div className="small-note">
+              See typical YoE &amp; company equivalents (e.g., Staff = L6 / E6 / 8–12+ yrs) and customize role aliases, target levels, or skills below.
+            </div>
+          </div>
+          <div style={{ minWidth: 280 }}>
             <select
               value={selectedTrackId}
               onChange={(e) => setSelectedTrackId(e.target.value)}
             >
-              {roleTracks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.display_name}
-                </option>
-              ))}
+              {roleTracks.map((t) => {
+                const yoe =
+                  t.typical_yoe_label ||
+                  (t.target_yoe_range.length >= 2
+                    ? `${t.target_yoe_range[0]}–${t.target_yoe_range[1]} yrs`
+                    : "");
+                return (
+                  <option key={t.id} value={t.id}>
+                    {t.display_name} {yoe ? `(${yoe})` : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
 
+        {(() => {
+          const activeTrack = roleTracks.find((t) => t.id === selectedTrackId);
+          if (!activeTrack) return null;
+          const yoe =
+            activeTrack.typical_yoe_label ||
+            (activeTrack.target_yoe_range.length >= 2
+              ? `${activeTrack.target_yoe_range[0]}–${activeTrack.target_yoe_range[1]} yrs`
+              : "Varies");
+          return (
+            <div className="role-meta-banner">
+              <div className="row-wrap">
+                <span className="pill pill-blue mono">Typical YoE: {yoe}</span>
+                {activeTrack.search_query && (
+                  <span className="pill">LinkedIn Query: {activeTrack.search_query}</span>
+                )}
+              </div>
+              {activeTrack.company_examples && activeTrack.company_examples.length > 0 && (
+                <div className="small-note">
+                  <strong>Company Title Equivalents:</strong>{" "}
+                  {activeTrack.company_examples.join(" · ")}
+                </div>
+              )}
+              {activeTrack.description && (
+                <div className="small-note">{activeTrack.description}</div>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="form-grid-3">
-          <div>
+          <div style={{ minWidth: 0 }}>
             <label>Title Aliases (comma-separated)</label>
-            <textarea
-              rows={3}
+            <AutoGrowTextarea
+              minHeight={85}
               value={aliasesText}
               onChange={(e) => setAliasesText(e.target.value)}
             />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <label>Core Must-Have Keywords (Weight 3.0x)</label>
-            <textarea
-              rows={3}
+            <AutoGrowTextarea
+              minHeight={85}
               value={coreKwText}
               onChange={(e) => setCoreKwText(e.target.value)}
             />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <label>Important Systems Keywords (Weight 2.0x)</label>
-            <textarea
-              rows={3}
+            <AutoGrowTextarea
+              minHeight={85}
               value={sysKwText}
               onChange={(e) => setSysKwText(e.target.value)}
             />
@@ -538,13 +1398,13 @@ export function ConfigPanel({ config, roleTracks, onUpdated }: ConfigPanelProps)
         </div>
 
         <div className="row-between">
-          <span className="small-note">Role file edits take effect immediately for future scrapes & scoring.</span>
+          <span className="small-note">Role track updates take effect immediately for future scrapes &amp; scoring.</span>
           <button
             className="btn"
             onClick={() => void handleSaveTrack()}
             disabled={saving}
           >
-            Save Role Track YAML
+            Save Role Track
           </button>
         </div>
       </div>

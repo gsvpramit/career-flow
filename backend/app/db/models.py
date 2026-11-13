@@ -79,6 +79,8 @@ class JobPostingRecord(Base):
     work_auth: Mapped[str] = mapped_column(String(40), default="unspecified", nullable=False)
     disposition: Mapped[str] = mapped_column(String(40), default="kept", nullable=False)
     application_status: Mapped[str] = mapped_column(String(40), default="ready", nullable=False)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    application_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     relevance_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
@@ -117,3 +119,32 @@ class TailoringRunRecord(Base):
     tailored_resume_json: Mapped[str] = mapped_column(Text, nullable=False)
     output_folder: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class SessionFilteredJobRecord(Base):
+    """Audit log of postings filtered by rules or skipped as already seen per session."""
+
+    __tablename__ = "session_filtered_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("scrape_sessions.id"), nullable=False, index=True
+    )
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    url_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    company: Mapped[str] = mapped_column(String(256), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    location: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    role_track: Mapped[str] = mapped_column(String(64), nullable=False, default="data_engineer")
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    filter_reason: Mapped[str] = mapped_column(String(128), nullable=False)
+    filter_reasons_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    suitability_details_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    promoted_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("job_postings.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+

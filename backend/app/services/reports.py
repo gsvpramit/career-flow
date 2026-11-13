@@ -20,6 +20,7 @@ from backend.app.db.models import (
 )
 from backend.app.schemas.job import (
     AnalyticsReportResponse,
+    AppliedJobSummaryItem,
     JobAnalysis,
     ReportBucketItem,
     RoleGapBreakdown,
@@ -29,7 +30,17 @@ from backend.app.schemas.job import (
 from backend.app.schemas.resume import CanonicalResume
 from backend.app.services.config_manager import ConfigManager
 from backend.app.services.jd_analyzer import _keyword_pattern
+from backend.app.services.label_formatter import (
+    format_filter_reason_label,
+    format_role_track_label,
+    format_skill_name,
+    format_source_label,
+    format_status_label,
+)
 from backend.app.services.resume_parser import resume_to_plain_text
+from backend.app.services.skill_enrichment import enrich_job_weighted_skills
+from backend.app.services.skills_graph import classify_job_domain
+from backend.app.services.timezone_utils import now_eastern, to_eastern
 
 _TIER_ORDER = {
     "core_must_have": 4,
@@ -94,8 +105,9 @@ def build_session_skills_gap(
         role_job_totals[role_track] += 1
         role_relevance_sums[role_track].append(float(job.relevance_score or 0.0))
 
+        enriched_skills = enrich_job_weighted_skills(job.raw_text or "", analysis.weighted_skills)
         seen_in_job: set[str] = set()
-        for sk in analysis.weighted_skills:
+        for sk in enriched_skills:
             norm = sk.keyword.strip().lower()
             if not norm or norm in seen_in_job:
                 continue
@@ -124,7 +136,7 @@ def build_session_skills_gap(
         display_kw, tier, prio = skill_meta[norm_kw]
         covered_by = _covered_names(norm_kw, role_filter)
         return SessionSkillGapItem(
-            keyword=display_kw,
+            keyword=format_skill_name(display_kw),
             tier=tier,
             priority_label=prio,
             demand_count=count,
@@ -220,6 +232,18 @@ def render_html_dashboard(summary: AnalyticsReportResponse) -> str:
         for sk in summary.top_missing_skills[:12]
     ) or '<tr><td colspan="3" class="muted">All tracked JD skills are covered by your base resumes.</td></tr>'
 
+    applied_rows = "".join(
+        f"""
+        <tr>
+          <td><strong>{escape(item.company)}</strong></td>
+          <td>{escape(item.title)}</td>
+          <td><span class="pill">{escape(item.status_label)}</span></td>
+          <td class="mono">{f"{item.tailored_score:.1f}%" if item.tailored_score is not None else "—"}</td>
+          <td class="muted">{escape(item.application_notes or "")}</td>
+        </tr>"""
+        for item in summary.applied_jobs[:20]
+    ) or '<tr><td colspan="5" class="muted">No applications logged yet. Update a job status to Applied in Sessions.</td></tr>'
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -254,10 +278,10 @@ def render_html_dashboard(summary: AnalyticsReportResponse) -> str:
   .mono {{ font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }}
   .kpis {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 22px; }}
   .kpi {{ background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }}
-  .kpi-val {{ font-size: 28px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; }}
+  .kpi-val {{ font-size: 26px; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; }}
   .kpi-lbl {{ font-size: 12px; color: var(--muted); }}
   .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 22px; }}
-  .card {{ background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }}
+  .card {{ background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; margin-bottom: 18px; }}
   .bar-list {{ display: flex; flex-direction: column; gap: 10px; }}
   .bar-meta {{ display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }}
   .bar-track {{ height: 8px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow: hidden; }}
@@ -273,7 +297,7 @@ def render_html_dashboard(summary: AnalyticsReportResponse) -> str:
   <header>
     <div>
       <h1>CareerFlow — Analytics Report</h1>
-      <div class="muted">Scope: {escape(summary.session_name)} &middot; Generated {summary.generated_at.strftime('%Y-%m-%d %H:%M UTC')}</div>
+      <div class="muted">Scope: {escape(summary.session_name)} &middot; Generated {summary.generated_at.strftime('%Y-%m-%d %I:%M %p %Z')}</div>
     </div>
     <div class="mono">Permanent Seen Ledger: {summary.seen_ledger_count} unique jobs</div>
   </header>
@@ -281,19 +305,29 @@ def render_html_dashboard(summary: AnalyticsReportResponse) -> str:
   <section class="kpis">
     <div class="kpi"><div class="kpi-lbl">Total Scanned</div><div class="kpi-val">{summary.total_scanned}</div></div>
     <div class="kpi"><div class="kpi-lbl">Saved Active Jobs</div><div class="kpi-val" style="color:var(--green)">{summary.total_saved}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Auto-Filtered Inline</div><div class="kpi-val" style="color:var(--amber)">{summary.total_filtered}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Manually Discarded</div><div class="kpi-val" style="color:var(--red)">{summary.total_discarded}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Kept Without Salary</div><div class="kpi-val">{summary.omitted_salary_count}</div></div>
-    <div class="kpi"><div class="kpi-lbl">Avg Relevance / Exports</div><div class="kpi-val" style="color:var(--blue)">{summary.avg_relevance_score}% &middot; {summary.total_exports}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Applied / Active Pipeline</div><div class="kpi-val" style="color:var(--blue)">{summary.total_applied}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Interviews / Offers</div><div class="kpi-val" style="color:var(--green)">{summary.interviewing_count} / {summary.offer_count}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Avg Base &rarr; Tailored ATS</div><div class="kpi-val" style="color:var(--blue)">{summary.avg_relevance_score}% &rarr; {summary.avg_tailored_score}%</div></div>
+    <div class="kpi"><div class="kpi-lbl">Auto-Filtered / Discarded</div><div class="kpi-val" style="color:var(--amber)">{summary.total_filtered} / {summary.total_discarded}</div></div>
   </section>
 
   <section class="grid">
-    {_render_bars("Jobs by Location", summary.by_location, "#0a84ff")}
+    {_render_bars("Top Companies (Open Roles)", summary.by_company, "#0a84ff")}
+    {_render_bars("Engineering Domains", summary.by_domain, "#5e5ce6")}
+    {_render_bars("Jobs by Location", summary.by_location, "#32ade6")}
     {_render_bars("Jobs by Target Role", summary.by_role, "#30d158")}
-    {_render_bars("Application Pipeline Status", summary.by_status, "#64d2ff")}
+    {_render_bars("Posted Recency", summary.by_posted_freshness, "#64d2ff")}
+    {_render_bars("Application Pipeline Status", summary.by_status, "#30d158")}
     {_render_bars("Inline Filter Drops", summary.by_filter_reason, "#ff9f0a")}
-    {_render_bars("Job Sources", summary.by_source, "#bf5af2")}
-    {_render_bars("Detected Compensation Currency", summary.by_currency, "#32d74b")}
+    {_render_bars("Job Sources & Currencies", summary.by_source, "#bf5af2")}
+  </section>
+
+  <section class="card">
+    <h3>Jobs Applied &amp; Current Standing</h3>
+    <table>
+      <thead><tr><th>Company</th><th>Role</th><th>Standing</th><th>Tailored ATS</th><th>Notes</th></tr></thead>
+      <tbody>{applied_rows}</tbody>
+    </table>
   </section>
 
   <section class="card">
@@ -308,6 +342,29 @@ def render_html_dashboard(summary: AnalyticsReportResponse) -> str:
 </html>"""
 
 
+_APPLIED_STANDING_STATUSES = {"applied", "screening", "interviewing", "offer", "rejected"}
+_APPLIED_ORDER = {"offer": 5, "interviewing": 4, "screening": 3, "applied": 2, "rejected": 1}
+
+
+def _posted_freshness_bucket(posted_at: datetime | None, reference_now: datetime) -> str:
+    if posted_at is None:
+        return "Date Unspecified"
+    dt = posted_at if posted_at.tzinfo is not None else posted_at.replace(tzinfo=timezone.utc)
+    ref = reference_now if reference_now.tzinfo is not None else reference_now.replace(tzinfo=timezone.utc)
+    hours = max(0.0, (ref - dt).total_seconds() / 3600.0)
+    if hours <= 1.0:
+        return "Last 1 Hour"
+    if hours <= 6.0:
+        return "1 - 6 Hours"
+    if hours <= 24.0:
+        return "6 - 24 Hours"
+    if hours <= 72.0:
+        return "1 - 3 Days"
+    if hours <= 168.0:
+        return "3 - 7 Days"
+    return "7+ Days"
+
+
 def build_analytics_summary(
     db: Session,
     config_manager: ConfigManager,
@@ -317,15 +374,17 @@ def build_analytics_summary(
 ) -> tuple[AnalyticsReportResponse, str]:
     """Build session/global analytics report metrics and write standalone HTML dashboard."""
     settings = config_manager.get_settings()
+    all_sessions = list(db.scalars(select(ScrapeSessionRecord)).all())
+    session_name_map = {s.id: s.name for s in all_sessions}
     sess_stmt = select(ScrapeSessionRecord)
     if session_id is not None:
         sess_stmt = sess_stmt.where(ScrapeSessionRecord.id == session_id)
     sessions = list(db.scalars(sess_stmt).all())
 
-    total_sessions = len(list(db.scalars(select(ScrapeSessionRecord)).all()))
+    total_sessions = len(all_sessions)
     session_name = sessions[0].name if (session_id is not None and sessions) else "All Sessions"
 
-    job_stmt = select(JobPostingRecord)
+    job_stmt = select(JobPostingRecord).order_by(JobPostingRecord.id.desc())
     if session_id is not None:
         job_stmt = job_stmt.where(JobPostingRecord.session_id == session_id)
     jobs = list(db.scalars(job_stmt).all())
@@ -337,8 +396,17 @@ def build_analytics_summary(
     filtered_from_sessions = sum(int(s.filtered_count or 0) for s in sessions)
     total_scanned = max(scanned_from_sessions, len(jobs) + filtered_from_sessions)
 
+    all_runs = list(db.scalars(select(TailoringRunRecord).order_by(TailoringRunRecord.id.desc())).all())
+    latest_run_by_job: dict[int, TailoringRunRecord] = {}
+    for run in all_runs:
+        if run.job_id not in latest_run_by_job:
+            latest_run_by_job[run.job_id] = run
+
     loc_counter: Counter[str] = Counter()
     role_counter: Counter[str] = Counter()
+    company_counter: Counter[str] = Counter()
+    domain_counter: Counter[str] = Counter()
+    freshness_counter: Counter[str] = Counter()
     source_counter: Counter[str] = Counter()
     currency_counter: Counter[str] = Counter()
     status_counter: Counter[str] = Counter()
@@ -346,26 +414,88 @@ def build_analytics_summary(
 
     omitted_salary = 0
     rel_scores: list[float] = []
+    tailored_scores: list[float] = []
+    lifts: list[float] = []
+    applied_items: list[AppliedJobSummaryItem] = []
+    ref_now = datetime.now(timezone.utc)
 
     for j in active_jobs:
-        loc_counter[j.location or "Unspecified"] += 1
-        role_counter[j.role_track or "senior_swe"] += 1
-        source_counter[(j.source or "manual").split(":")[0]] += 1
-        status_counter[j.application_status or "ready"] += 1
+        loc_counter[(j.location or "").strip() or "Unspecified"] += 1
+        role_label = format_role_track_label(j.role_track or "senior_swe", config_manager)
+        role_counter[role_label] += 1
+        company_clean = (j.company or "").strip() or "Unknown Company"
+        company_counter[company_clean] += 1
+        domain_label = classify_job_domain(j.role_track or "senior_swe", j.title or "", j.raw_text or "")
+        domain_counter[domain_label] += 1
+        freshness_counter[_posted_freshness_bucket(j.posted_at, ref_now)] += 1
+
+        src_label = format_source_label((j.source or "manual").split(":")[0])
+        source_counter[src_label] += 1
+        app_status = (j.application_status or "ready").strip().lower()
+        status_label = format_status_label(app_status)
+        status_counter[status_label] += 1
         rel_scores.append(float(j.relevance_score or 0.0))
+
+        run = latest_run_by_job.get(j.id)
+        if run is not None:
+            t_score = float(run.tailored_score or 0.0)
+            b_score = float(run.base_score or 0.0)
+            tailored_scores.append(t_score)
+            lifts.append(round(t_score - b_score, 1))
+
+        if app_status in _APPLIED_STANDING_STATUSES:
+            run_files: list[str] = []
+            if run and run.output_folder:
+                folder = Path(run.output_folder)
+                if folder.exists():
+                    run_files = [
+                        f.name
+                        for f in sorted(folder.iterdir())
+                        if f.is_file() and f.suffix.lower() in (".pdf", ".docx")
+                    ]
+            applied_items.append(
+                AppliedJobSummaryItem(
+                    job_id=j.id,
+                    session_id=j.session_id,
+                    session_name=session_name_map.get(j.session_id or -1, f"Session {j.session_id or ''}"),
+                    company=company_clean,
+                    title=j.title,
+                    location=(j.location or "").strip() or "Unspecified",
+                    role_track=j.role_track or "senior_swe",
+                    role_label=role_label,
+                    application_status=app_status,
+                    status_label=status_label,
+                    applied_at=to_eastern(j.applied_at or j.created_at),
+                    application_notes=j.application_notes or "",
+                    base_score=round(float(run.base_score), 1) if run else round(float(j.relevance_score or 0.0), 1),
+                    tailored_score=round(float(run.tailored_score), 1) if run else None,
+                    latest_run_id=run.id if run else None,
+                    latest_files=run_files,
+                    url=j.url,
+                )
+            )
+
         if j.salary_min is None:
             omitted_salary += 1
             currency_counter["Omitted"] += 1
         else:
-            currency_counter[j.salary_currency or "USD"] += 1
+            currency_counter[(j.salary_currency or "USD").upper()] += 1
+
+    applied_items.sort(
+        key=lambda item: (
+            -_APPLIED_ORDER.get(item.application_status, 0),
+            -(item.applied_at.timestamp() if item.applied_at else 0.0),
+            -item.job_id,
+        )
+    )
 
     for _ in discarded_jobs:
-        status_counter["discarded"] += 1
+        status_counter[format_status_label("discarded")] += 1
 
     for s in sessions:
         breakdown = json.loads(s.filter_breakdown_json or "{}")
         for reason, cnt in breakdown.items():
-            filter_counter[reason] += int(cnt)
+            filter_counter[format_filter_reason_label(reason)] += int(cnt)
 
     seen_ledger_count = int(db.scalar(select(func.count(SeenJobFingerprintRecord.id))) or 0)
 
@@ -379,11 +509,31 @@ def build_analytics_summary(
 
     gap = build_session_skills_gap(db, config_manager, session_id=session_id)
     avg_rel = round(sum(rel_scores) / len(rel_scores), 1) if rel_scores else 0.0
+    avg_tailored = round(sum(tailored_scores) / len(tailored_scores), 1) if tailored_scores else 0.0
+    avg_lift = round(sum(lifts) / len(lifts), 1) if lifts else 0.0
+
+    interviewing_cnt = sum(1 for item in applied_items if item.application_status in ("screening", "interviewing"))
+    offer_cnt = sum(1 for item in applied_items if item.application_status == "offer")
+    tailored_jobs_cnt = sum(
+        1
+        for j in active_jobs
+        if j.id in latest_run_by_job or (j.application_status or "") in ("resume_created", *_APPLIED_STANDING_STATUSES)
+    )
+
+    funnel_base = max(total_scanned, len(active_jobs), 1)
+    funnel_stages = [
+        ReportBucketItem(label="Scanned", count=total_scanned, pct=100.0 if total_scanned else 0.0),
+        ReportBucketItem(label="Saved Active", count=len(active_jobs), pct=round((len(active_jobs) / funnel_base) * 100.0, 1)),
+        ReportBucketItem(label="Resume Tailored", count=tailored_jobs_cnt, pct=round((tailored_jobs_cnt / funnel_base) * 100.0, 1)),
+        ReportBucketItem(label="Applied / Submitted", count=len(applied_items), pct=round((len(applied_items) / funnel_base) * 100.0, 1)),
+        ReportBucketItem(label="Screening / Interviewing", count=interviewing_cnt, pct=round((interviewing_cnt / funnel_base) * 100.0, 1)),
+        ReportBucketItem(label="Offers", count=offer_cnt, pct=round((offer_cnt / funnel_base) * 100.0, 1)),
+    ]
 
     filter_total = sum(filter_counter.values())
     total_all_jobs = len(jobs)
     summary = AnalyticsReportResponse(
-        generated_at=datetime.now(timezone.utc),
+        generated_at=now_eastern(),
         session_id=session_id,
         session_name=session_name,
         total_sessions=total_sessions,
@@ -395,13 +545,23 @@ def build_analytics_summary(
         omitted_salary_count=omitted_salary,
         avg_relevance_score=avg_rel,
         total_exports=total_exports,
+        total_applied=len(applied_items),
+        interviewing_count=interviewing_cnt,
+        offer_count=offer_cnt,
+        avg_tailored_score=avg_tailored,
+        avg_ats_lift=avg_lift,
         by_location=_to_buckets(loc_counter, len(active_jobs)),
         by_role=_to_buckets(role_counter, len(active_jobs)),
+        by_company=_to_buckets(company_counter, len(active_jobs)),
+        by_domain=_to_buckets(domain_counter, len(active_jobs)),
+        by_posted_freshness=_to_buckets(freshness_counter, len(active_jobs)),
+        funnel_stages=funnel_stages,
         by_source=_to_buckets(source_counter, len(active_jobs)),
         by_currency=_to_buckets(currency_counter, len(active_jobs)),
         by_status=_to_buckets(status_counter, total_all_jobs),
         by_filter_reason=_to_buckets(filter_counter, filter_total),
         top_missing_skills=gap.overall_missing[:12],
+        applied_jobs=applied_items,
         html_report_path=None,
     )
 
@@ -411,6 +571,5 @@ def build_analytics_summary(
         out_dir.mkdir(parents=True, exist_ok=True)
         html_path = out_dir / "dashboard.html"
         html_path.write_text(html, encoding="utf-8")
-        summary.html_report_path = str(html_path.as_posix())
 
     return summary, html

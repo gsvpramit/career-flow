@@ -1,0 +1,67 @@
+id: security_engineer
+display_name: Security / AppSec Engineer
+category: engineering_specialty
+typical_yoe_label: 3–8 yrs
+search_query: Security Engineer
+company_examples:
+  - Anthropic Security MTS
+  - Coinbase Security IC4/IC5
+  - Stripe Security Engineer
+  - Cloudflare AppSec
+aliases:
+  - Security Engineer
+  - Senior Security Engineer
+  - Application Security Engineer
+  - AppSec Engineer
+  - Cloud Security Engineer
+  - Product Security Engineer
+  - AI Security Engineer
+  - Security Software Engineer
+  - Infrastructure Security Engineer
+  - Detection and Response Engineer
+description: 3–8 YoE · AppSec, cloud IAM, threat modeling, supply-chain security, AI safety hardening & zero-trust architecture
+target_yoe_range:
+  - 3
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - go
+    - application security
+    - cloud security
+    - iam
+    - oauth
+    - sso
+    - cryptography
+    - threat modeling
+    - vulnerability management
+    - kubernetes
+    - aws
+    - gcp
+  important_systems:
+    - zero trust
+    - penetration testing
+    - sast
+    - dast
+    - container security
+    - secret management
+    - incident response
+    - audit logging
+    - terraform
+  senior_leadership:
+    - security architecture
+    - compliance
+    - soc 2
+    - cross-functional
+    - mentorship
+  bonus_nice_to_have:
+    - rust
+    - ebpf
+    - siem
+    - llm guardrails
+    - red teaming

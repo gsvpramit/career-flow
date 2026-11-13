@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { api } from "../api";
+import { createDefaultEmployers } from "../constants/tailoring";
+import { LiveResumeSheet } from "./LiveResumeSheet";
 import type {
+  BootstrapEmployerInput,
   CanonicalResume,
   ResumeListResponse,
   ResumeRecordResponse,
@@ -79,6 +82,23 @@ export function ResumePanel({
   const [uploadRole, setUploadRole] = useState(roleTracks[0]?.id || "senior_swe");
   const [uploadBase, setUploadBase] = useState(true);
   const [showUploadBox, setShowUploadBox] = useState(false);
+  const [showBootstrapBox, setShowBootstrapBox] = useState(false);
+  const [bootName, setBootName] = useState("Alex Rivera");
+  const [bootEmail, setBootEmail] = useState("alex.rivera.eng@example.com");
+  const [bootLocation, setBootLocation] = useState("New York, NY");
+  const [bootRole, setBootRole] = useState("senior_swe");
+  const [bootYears, setBootYears] = useState(5);
+  const [bootSkills, setBootSkills] = useState("");
+  const [bootEmployers, setBootEmployers] = useState<BootstrapEmployerInput[]>(() =>
+    createDefaultEmployers()
+  );
+  const [bootGradDegree, setBootGradDegree] = useState("");
+  const [bootUndergradDegree, setBootUndergradDegree] = useState("");
+  const [bootBulletsPerExp, setBootBulletsPerExp] = useState(5);
+  const [bootProjectsCount, setBootProjectsCount] = useState(2);
+  const [bootPageBudget, setBootPageBudget] = useState(1.5);
+  const [bootModeBusy, setBootModeBusy] = useState<"ollama" | "fallback" | null>(null);
+  const [previewResumeId, setPreviewResumeId] = useState<number | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +211,65 @@ export function ResumePanel({
     }
   };
 
+  const handleBootstrap = async (useOllama: boolean) => {
+    setBusy(true);
+    setBootModeBusy(useOllama ? "ollama" : "fallback");
+    setError(null);
+    setNotice(null);
+    try {
+      const skillsList = bootSkills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const validEmployers = bootEmployers
+        .filter((emp) => emp.company.trim().length > 0)
+        .map((emp) => ({
+          company: emp.company.trim(),
+          title: emp.title?.trim() || null,
+          location: emp.location?.trim() || null,
+          start_date: emp.start_date?.trim() || null,
+          end_date: emp.end_date?.trim() || null,
+          bullets_count: emp.bullets_count || bootBulletsPerExp,
+        }));
+      const roleBulletCounts = validEmployers.map(
+        (emp) => emp.bullets_count || bootBulletsPerExp
+      );
+      const res = await api.bootstrapResume({
+        full_name: bootName.trim() || "Alex Rivera",
+        email: bootEmail.trim() || "alex.rivera.eng@example.com",
+        location: bootLocation.trim() || "New York, NY",
+        role_track: bootRole || "senior_swe",
+        years_experience: Math.max(1, Math.min(20, Number(bootYears) || 5)),
+        focus_skills: skillsList,
+        employers: validEmployers.length > 0 ? validEmployers : undefined,
+        recent_company: validEmployers[0]?.company || null,
+        prior_company: validEmployers[1]?.company || null,
+        graduate_degree: bootGradDegree.trim() || null,
+        undergrad_degree: bootUndergradDegree.trim() || null,
+        bullets_per_experience: bootBulletsPerExp,
+        bullets_per_role_counts: roleBulletCounts.length > 0 ? roleBulletCounts : null,
+        projects_count: Math.max(2, bootProjectsCount),
+        page_budget: bootPageBudget,
+        use_llm: useOllama,
+        save_as_base: true,
+      });
+      setShowBootstrapBox(false);
+      setPreviewResumeId(res.resume.id);
+      const notesTail = res.notes.length > 0 ? ` — ${res.notes[0]}` : "";
+      setNotice(
+        `Generated "${res.resume.name}" via ${
+          res.model_used || "Structured Reasoning Script"
+        } (${res.humanized_count} humanizer checks)${notesTail}`
+      );
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Auto-generation failed.");
+    } finally {
+      setBusy(false);
+      setBootModeBusy(null);
+    }
+  };
+
   const handleSetActive = async (item: ResumeRecordResponse) => {
     setBusy(true);
     try {
@@ -236,7 +315,19 @@ export function ResumePanel({
         <div className="row-wrap">
           <button
             className="btn"
-            onClick={() => setShowUploadBox((v) => !v)}
+            onClick={() => {
+              setShowBootstrapBox((v) => !v);
+              setShowUploadBox(false);
+            }}
+          >
+            {showBootstrapBox ? "Close Auto-Generator" : "Auto-Generate 5-Yr Base"}
+          </button>
+          <button
+            className="btn"
+            onClick={() => {
+              setShowUploadBox((v) => !v);
+              setShowBootstrapBox(false);
+            }}
           >
             {showUploadBox ? "Close Upload" : "Upload PDF / DOCX / TEX"}
           </button>
@@ -252,9 +343,284 @@ export function ResumePanel({
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-success">{notice}</div>}
 
+      {showBootstrapBox && (
+        <div className="card stack-md">
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15 }}>
+              Auto-Generate Quantified 5-Year Generic Base Resume
+            </h3>
+            <div className="small-note">
+              Enter minimal info below — creates a recruiter-ready Google XYZ resume humanized for ATS, optionally enhanced by your single local Ollama model.
+            </div>
+          </div>
+          <div className="form-grid-3">
+            <div>
+              <label>Full Name</label>
+              <input
+                value={bootName}
+                onChange={(e) => setBootName(e.target.value)}
+                placeholder="Alex Rivera"
+              />
+            </div>
+            <div>
+              <label>Email</label>
+              <input
+                value={bootEmail}
+                onChange={(e) => setBootEmail(e.target.value)}
+                placeholder="alex.rivera.eng@example.com"
+              />
+            </div>
+            <div>
+              <label>Target City / State</label>
+              <input
+                value={bootLocation}
+                onChange={(e) => setBootLocation(e.target.value)}
+                placeholder="New York, NY"
+              />
+            </div>
+          </div>
+          <div className="form-grid-3">
+            <div>
+              <label>Target Role Track</label>
+              <select value={bootRole} onChange={(e) => setBootRole(e.target.value)}>
+                {roleTracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label>Years of Experience</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={bootYears}
+                onChange={(e) => setBootYears(Number(e.target.value) || 5)}
+              />
+            </div>
+            <div>
+              <label>Focus Skills (optional comma-separated)</label>
+              <input
+                value={bootSkills}
+                onChange={(e) => setBootSkills(e.target.value)}
+                placeholder="Python, Kubernetes, Kafka, AWS"
+              />
+            </div>
+          </div>
+          <div className="form-grid-3">
+            <div>
+              <label>Default Bullets / Role</label>
+              <select
+                value={bootBulletsPerExp}
+                onChange={(e) => setBootBulletsPerExp(Number(e.target.value) || 5)}
+              >
+                {[3, 4, 5, 6, 7, 8].map((n) => (
+                  <option key={n} value={n}>
+                    {n} bullets / role
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label>Projects Count (Min 2)</label>
+              <select
+                value={bootProjectsCount}
+                onChange={(e) => setBootProjectsCount(Math.max(2, Number(e.target.value) || 2))}
+              >
+                {[2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n} Projects
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label>Target Page Size</label>
+              <select
+                value={bootPageBudget}
+                onChange={(e) => setBootPageBudget(Number(e.target.value) || 1.5)}
+              >
+                <option value={1}>1 Page (Tight Senior)</option>
+                <option value={1.5}>1.5 Pages (Balanced)</option>
+                <option value={2}>2 Pages (Detailed Senior)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="card-elevated stack-sm">
+            <div className="row-between">
+              <strong style={{ fontSize: 13.5 }}>
+                Employers &amp; Employment Timeline ({bootEmployers.length})
+              </strong>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() =>
+                  setBootEmployers((prev) => [
+                    ...prev,
+                    {
+                      company: "",
+                      title: "Software Engineer",
+                      location: bootLocation || "Austin, TX",
+                      start_date: "Jan 2019",
+                      end_date: "Feb 2021",
+                      bullets_count: Math.max(4, bootBulletsPerExp - 1),
+                    },
+                  ])
+                }
+              >
+                + Add Employer
+              </button>
+            </div>
+            {bootEmployers.map((emp, idx) => (
+              <div key={idx} className="form-grid-3" style={{ alignItems: "end" }}>
+                <div>
+                  <label>Company #{idx + 1}</label>
+                  <input
+                    value={emp.company}
+                    onChange={(e) => {
+                      const next = [...bootEmployers];
+                      next[idx] = { ...emp, company: e.target.value };
+                      setBootEmployers(next);
+                    }}
+                    placeholder="e.g. Amazon"
+                  />
+                </div>
+                <div>
+                  <label>Role Title</label>
+                  <input
+                    value={emp.title || ""}
+                    onChange={(e) => {
+                      const next = [...bootEmployers];
+                      next[idx] = { ...emp, title: e.target.value };
+                      setBootEmployers(next);
+                    }}
+                    placeholder="Senior Software Engineer"
+                  />
+                </div>
+                <div className="row-wrap" style={{ flexWrap: "nowrap", gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <label>Start – End Dates</label>
+                    <div className="row-wrap" style={{ flexWrap: "nowrap", gap: 4 }}>
+                      <input
+                        value={emp.start_date || ""}
+                        onChange={(e) => {
+                          const next = [...bootEmployers];
+                          next[idx] = { ...emp, start_date: e.target.value };
+                          setBootEmployers(next);
+                        }}
+                        placeholder="Jan 2023"
+                      />
+                      <input
+                        value={emp.end_date || ""}
+                        onChange={(e) => {
+                          const next = [...bootEmployers];
+                          next[idx] = { ...emp, end_date: e.target.value };
+                          setBootEmployers(next);
+                        }}
+                        placeholder="Present"
+                      />
+                    </div>
+                  </div>
+                  <div style={{ width: 92 }}>
+                    <label>Location</label>
+                    <input
+                      value={emp.location || ""}
+                      onChange={(e) => {
+                        const next = [...bootEmployers];
+                        next[idx] = { ...emp, location: e.target.value };
+                        setBootEmployers(next);
+                      }}
+                      placeholder="City, ST"
+                    />
+                  </div>
+                  <div style={{ width: 72 }}>
+                    <label>Bullets</label>
+                    <select
+                      value={emp.bullets_count || bootBulletsPerExp}
+                      onChange={(e) => {
+                        const next = [...bootEmployers];
+                        next[idx] = { ...emp, bullets_count: Number(e.target.value) || 5 };
+                        setBootEmployers(next);
+                      }}
+                    >
+                      {[3, 4, 5, 6, 7, 8].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {bootEmployers.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger-ghost"
+                      onClick={() =>
+                        setBootEmployers((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      title="Remove employer"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="form-grid-2">
+            <div>
+              <label>Graduate Degree (optional)</label>
+              <input
+                value={bootGradDegree}
+                onChange={(e) => setBootGradDegree(e.target.value)}
+                placeholder="Master of Science in Data Science (default)"
+              />
+            </div>
+            <div>
+              <label>Undergraduate Degree (optional)</label>
+              <input
+                value={bootUndergradDegree}
+                onChange={(e) => setBootUndergradDegree(e.target.value)}
+                placeholder="Bachelor of Science in Computer Science (default)"
+              />
+            </div>
+          </div>
+          <div className="row-between">
+            <span className="small-note">
+              Includes Summary, variable bullets per employer, {bootProjectsCount} Projects, Technical Skills &amp; Grad/Undergrad Education.
+            </span>
+            <div className="row-wrap">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void handleBootstrap(false)}
+                disabled={busy}
+              >
+                {bootModeBusy === "fallback"
+                  ? "Generating (Script)..."
+                  : "Generate Without Ollama (Script)"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void handleBootstrap(true)}
+                disabled={busy}
+              >
+                {bootModeBusy === "ollama"
+                  ? "Generating (Ollama)..."
+                  : "Generate With Local Ollama"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showUploadBox && (
         <div className="card stack-md">
-          <h3 style={{ margin: 0, fontSize: 15 }}>Upload Resume File (.pdf, .docx, .txt, .tex)</h3>
+          <h3 style={{ margin: 0, fontSize: 15 }}>Upload Resume</h3>
           <div className="form-grid-3">
             <div>
               <label>Profile Name</label>
@@ -372,6 +738,14 @@ export function ResumePanel({
                       )}
                       <button
                         className="btn btn-sm"
+                        onClick={() =>
+                          setPreviewResumeId((prev) => (prev === item.id ? null : item.id))
+                        }
+                      >
+                        {previewResumeId === item.id ? "Hide Preview" : "Preview"}
+                      </button>
+                      <button
+                        className="btn btn-sm"
                         onClick={() => openEditResume(item)}
                       >
                         Edit
@@ -391,6 +765,28 @@ export function ResumePanel({
           </div>
         ))
       )}
+
+      {previewResumeId != null &&
+        resumeState?.resumes.find((r) => r.id === previewResumeId) && (
+          <div className="card stack-md">
+            <div className="row-between">
+              <strong style={{ fontSize: 15 }}>
+                Resume Preview:{" "}
+                {resumeState.resumes.find((r) => r.id === previewResumeId)?.name}
+              </strong>
+              <button
+                className="btn btn-sm"
+                onClick={() => setPreviewResumeId(null)}
+              >
+                Close Preview
+              </button>
+            </div>
+            <LiveResumeSheet
+              resume={resumeState.resumes.find((r) => r.id === previewResumeId)!.content}
+              titleLabel="Formatted ATS Base Resume"
+            />
+          </div>
+        )}
 
       {editorOpen && (
         <div className="card stack-md">
@@ -432,7 +828,7 @@ export function ResumePanel({
           </div>
 
           <div className="card-elevated stack-sm">
-            <strong>Candidate Contact & Target Location</strong>
+            <strong>Contact &amp; Location</strong>
             <div className="form-grid-3">
               <div>
                 <label>Full Name *</label>
@@ -726,7 +1122,7 @@ export function ResumePanel({
           </div>
 
           <div className="card-elevated stack-sm">
-            <strong>Technical Skills (comma-separated items per category)</strong>
+            <strong>Technical Skills</strong>
             {form.skills.map((cat, idx) => (
               <div key={idx} className="form-grid-2">
                 <input
@@ -758,7 +1154,7 @@ export function ResumePanel({
 
           <div className="row-between">
             <span className="small-note">
-              Saved locally to SQLite & matched automatically during batch scoring.
+              Saved to your profile workspace &amp; matched automatically during batch scoring.
             </span>
             <button
               className="btn btn-primary"

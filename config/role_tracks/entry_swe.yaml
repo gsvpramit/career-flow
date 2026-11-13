@@ -1,0 +1,81 @@
+id: entry_swe
+display_name: Entry-Level / New Grad SWE
+category: swe_levels
+typical_yoe_label: 0–2 yrs
+search_query: Software Engineer New Grad
+company_examples:
+- Google L3
+- Meta E3
+- Amazon SDE 1
+- Databricks L3
+- Coinbase IC3
+- Microsoft L60
+aliases:
+- Software Engineer I
+- SWE I
+- Associate Software Engineer
+- Junior Software Engineer
+- Entry Level Software Engineer
+- New Grad Software Engineer
+- University Graduate Software Engineer
+- Early Career Software Engineer
+- L3 Software Engineer
+- E3 Software Engineer
+- IC3 Software Engineer
+- SDE 1
+- SDE I
+- Software Development Engineer I
+- ICT2 Software Engineer
+- L1 Software Engineer
+- L2 Software Engineer
+description: 0–2 YoE · Google L3, Meta E3, Amazon SDE 1, Databricks L3, Coinbase IC3
+  — entry execution on scoped features with mentorship
+target_yoe_range:
+- 0
+- 2
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.0
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+  - python
+  - java
+  - c++
+  - typescript
+  - javascript
+  - data structures
+  - algorithms
+  - sql
+  - git
+  - rest api
+  - unit testing
+  - object-oriented design
+  important_systems:
+  - docker
+  - linux
+  - postgresql
+  - react
+  - node.js
+  - ci/cd
+  - debugging
+  - code review
+  - aws
+  - gcp
+  - Apache Spark
+  - Generative AI
+  - Observability
+  - on-call
+  - Ownership
+  senior_leadership:
+  - collaboration
+  - documentation
+  - agile
+  - ownership
+  bonus_nice_to_have:
+  - kubernetes
+  - redis
+  - go
+  - microservices
+  - distributed systems

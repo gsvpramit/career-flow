@@ -1,0 +1,79 @@
+id: principal_swe
+display_name: Principal / Senior Staff Engineer
+category: swe_levels
+typical_yoe_label: 10–15+ yrs
+search_query: Principal Software Engineer
+company_examples:
+- Google L7
+- Amazon L7 Principal
+- Stripe L5 Principal
+- Microsoft L67
+- Anthropic Principal MTS
+- Databricks L7
+aliases:
+- Principal Software Engineer
+- Principal Engineer
+- Senior Staff Software Engineer
+- Senior Staff Engineer
+- Distinguished Engineer
+- Fellow
+- Principal Member of Technical Staff
+- Principal MTS
+- L7 Software Engineer
+- E7 Software Engineer
+- IC7 Software Engineer
+- Level 67 Software Engineer
+- Stripe L5 Principal Engineer
+- Software Architect
+- Principal Architect
+- Chief Architect
+description: 10–15+ YoE · Google/Amazon L7, Microsoft L67, Stripe L5 — company-wide
+  technical strategy, foundational systems & multi-year vision
+target_yoe_range:
+- 10
+- 15
+weights:
+  core_must_have: 3.0
+  important_systems: 2.2
+  senior_leadership: 2.2
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+  - distributed systems
+  - enterprise architecture
+  - technical strategy
+  - cloud architecture
+  - scalability
+  - fault tolerance
+  - security
+  - go
+  - java
+  - python
+  - c++
+  important_systems:
+  - multi-region
+  - zero trust
+  - data architecture
+  - observability
+  - capacity planning
+  - reliability
+  - compliance
+  - performance engineering
+  - on-call
+  - Collaboration
+  - Agile
+  - Next.js
+  senior_leadership:
+  - technical vision
+  - architecture review
+  - executive leadership
+  - rfc
+  - mentorship
+  - build vs buy
+  - multi-org alignment
+  - due diligence
+  bonus_nice_to_have:
+  - rust
+  - kubernetes
+  - ai infrastructure
+  - patents

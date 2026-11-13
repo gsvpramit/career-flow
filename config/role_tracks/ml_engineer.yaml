@@ -1,16 +1,27 @@
 id: ml_engineer
 display_name: Machine Learning Engineer
+category: ai_data
+typical_yoe_label: 3–7 yrs
+search_query: Machine Learning Engineer
+company_examples:
+  - Google L4/L5 ML
+  - Meta E4/E5 MLE
+  - Netflix Senior MLE
+  - Databricks ML Engineer
+  - Spotify MLE
 aliases:
+  - Machine Learning Engineer
   - Senior Machine Learning Engineer
   - Senior ML Engineer
   - MLE
-  - ML Infrastructure Engineer
-  - MLOps Engineer
-  - Applied Scientist
-description: 4-8 YoE model training, feature stores, ranking/recommendations, and MLOps pipelines
+  - ML Software Engineer
+  - Applied ML Engineer
+  - Ranking ML Engineer
+  - Recommendation Systems Engineer
+description: 3–7 YoE · Model training, ranking/recommendations, feature engineering & real-time ML systems
 target_yoe_range:
-  - 4
-  - 8
+  - 3
+  - 7
 weights:
   core_must_have: 3.0
   important_systems: 2.0

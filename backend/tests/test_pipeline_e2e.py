@@ -237,8 +237,8 @@ def test_full_pipeline_ingest_score_and_export_pdf_docx(tmp_path: Path) -> None:
         assert analysis["salary"]["meets_target"] is True
         assert analysis["yoe"]["min_years"] == 5
         assert analysis["yoe"]["fits_target_range"] is True
-        assert any(s["keyword"] == "rag" and s["in_required_section"] is False for s in analysis["weighted_skills"])
-        assert any(s["keyword"] == "vector database" and s["in_required_section"] is True for s in analysis["weighted_skills"])
+        assert any(s["keyword"].lower() == "rag" and s["in_required_section"] is False for s in analysis["weighted_skills"])
+        assert any(s["keyword"].lower() == "vector database" and s["in_required_section"] is True for s in analysis["weighted_skills"])
 
         # 2. Scoring without base resume triggers NO_BASE_RESUME 409 prompt
         no_resume_score = client.post("/api/jobs/score", json={"job_id": job_id})
@@ -255,7 +255,7 @@ def test_full_pipeline_ingest_score_and_export_pdf_docx(tmp_path: Path) -> None:
         assert score_resp.status_code == 200
         report = score_resp.json()
         assert 0 < report["overall_score"] <= 100
-        missing_kw = {item["keyword"] for item in report["missing_skills"]}
+        missing_kw = {item["keyword"].lower() for item in report["missing_skills"]}
         assert "vector database" in missing_kw
         assert "embeddings" in missing_kw
         # Verify humanizer caught "Spearheaded" AI cliche in b2
@@ -266,7 +266,7 @@ def test_full_pipeline_ingest_score_and_export_pdf_docx(tmp_path: Path) -> None:
         assert export_resp.status_code == 201
         export_data = export_resp.json()
         assert export_data["pdf_text_verified"] is True
-        expected_stem = "Alex_Rivera_Acme_Cloud_AI_Senior_AI_Engineer"
+        expected_stem = "Alex_Rivera_Acme_Cloud_AI_Senior_AI_Engineer_J1_R1"
         assert set(export_data["generated_files"]) >= {
             f"{expected_stem}.pdf",
             f"{expected_stem}.docx",
@@ -459,7 +459,7 @@ def test_sessions_role_inference_tailor_preview_and_location_modifier(tmp_path: 
             for exp in preview["experience_comparisons"]
             for b in exp["bullets"]
         ]
-        assert any("Led " in b["tailored_text"] and b["status"] == "polished" for b in all_bullets)
+        assert any("Led " in b["tailored_text"] and b["status"] in ("polished", "edited") for b in all_bullets)
 
         # Export the tailored & fact-checked resume
         export_resp = client.post(
@@ -474,13 +474,13 @@ def test_sessions_role_inference_tailor_preview_and_location_modifier(tmp_path: 
         assert export_resp.status_code == 201
         exp_body = export_resp.json()
         assert exp_body["generated_files"] == [
-            "Alex_Rivera_Harbor_Tech_Senior_Software_Engineer.pdf",
+            "Alex_Rivera_Harbor_Tech_Senior_Software_Engineer_J2_R1.pdf",
             "job_posting.json",
             "ats_report.json",
             "resume_snapshot.json",
         ]
         pdf_reader = PdfReader(
-            str(Path(exp_body["output_folder"]) / "Alex_Rivera_Harbor_Tech_Senior_Software_Engineer.pdf")
+            str(Path(exp_body["output_folder"]) / "Alex_Rivera_Harbor_Tech_Senior_Software_Engineer_J2_R1.pdf")
         )
         pdf_text = "\n".join((p.extract_text() or "") for p in pdf_reader.pages)
         assert "San Diego, CA" in pdf_text
@@ -654,7 +654,7 @@ def test_batch_scrape_simultaneous_filters_and_permanent_discard(tmp_path: Path)
             assert gap.status_code == 200
             gap_data = gap.json()
             assert gap_data["total_active_jobs"] == 1
-            missing_kws = {item["keyword"] for item in gap_data["overall_missing"]}
+            missing_kws = {item["keyword"].lower() for item in gap_data["overall_missing"]}
             assert "vector database" in missing_kws
 
             rep = client.get(f"/api/reports?session_id={s1}")
@@ -723,3 +723,639 @@ def test_linkedin_relative_time_and_description_markup_extraction() -> None:
         detail = fetch_job_posting(url=cards[0].detail_url, client=client)
         assert "distributed GPU inference" in detail.raw_text
         assert "Join or sign in" not in detail.raw_text
+
+
+def test_ashby_scraping_us_locations_async_progress_and_flush(tmp_path: Path) -> None:
+    import time
+    from datetime import datetime, timezone
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    client, output_dir = _build_client(tmp_path)
+
+    def _mock_handler(request: httpx.Request) -> httpx.Response:
+        if "api.ashbyhq.com/posting-api/job-board/openai" in str(request.url):
+            return httpx.Response(
+                200,
+                json={
+                    "jobs": [
+                        {
+                            "title": "Senior AI Engineer",
+                            "location": "San Francisco, CA",
+                            "secondaryLocations": [{"location": "Seattle, WA"}],
+                            "publishedAt": now_iso,
+                            "isListed": True,
+                            "workplaceType": "Hybrid",
+                            "jobUrl": "https://jobs.ashbyhq.com/openai/1",
+                            "descriptionPlain": (
+                                "Build Python LLM agents, RAG evaluation, Kubernetes microservices. "
+                                "5+ years experience. Compensation $210,000 - $280,000."
+                            ),
+                        },
+                        {
+                            "title": "Senior AI Engineer",
+                            "location": "London, UK",
+                            "secondaryLocations": [],
+                            "publishedAt": now_iso,
+                            "isListed": True,
+                            "workplaceType": "Onsite",
+                            "jobUrl": "https://jobs.ashbyhq.com/openai/2",
+                            "descriptionPlain": "London AI infrastructure role.",
+                        },
+                        {
+                            "title": "Hidden AI Engineer",
+                            "location": "Seattle, WA",
+                            "publishedAt": now_iso,
+                            "isListed": False,
+                            "jobUrl": "https://jobs.ashbyhq.com/openai/3",
+                            "descriptionPlain": "Unlisted posting.",
+                        },
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    mock_http = httpx.Client(transport=httpx.MockTransport(_mock_handler))
+    try:
+        with client:
+            client.app.state.scrape_http_client = mock_http
+
+            locs = client.get("/api/config/locations")
+            assert locs.status_code == 200
+            loc_data = locs.json()
+            assert len(loc_data["top_20"]) == 20
+            assert "Seattle, WA" in loc_data["top_20"]
+            assert len(loc_data["all_us"]) > 50
+
+            resume_resp = client.post("/api/resumes", json=_sample_resume_payload())
+            assert resume_resp.status_code == 201
+            resume_id = resume_resp.json()["id"]
+
+            sess_resp = client.post("/api/sessions", json={"name": "Async Ashby Run"})
+            assert sess_resp.status_code == 201
+            sess_id = sess_resp.json()["id"]
+
+            start_resp = client.post(
+                f"/api/sessions/{sess_id}/scrape/start",
+                json={
+                    "posted_within": "24h",
+                    "sources": ["ashby"],
+                    "company_boards": ["ashby:openai"],
+                    "locations": ["ALL_US"],
+                    "role_tracks": ["ai_engineer"],
+                },
+            )
+            assert start_resp.status_code == 200
+            assert start_resp.json()["status"] in ("running", "completed")
+
+            prog = start_resp.json()
+            for _ in range(40):
+                if prog["status"] in ("completed", "failed"):
+                    break
+                time.sleep(0.05)
+                prog = client.get(f"/api/sessions/{sess_id}/scrape/progress").json()
+
+            assert prog["status"] == "completed", prog.get("error")
+            assert prog["result"]["saved_count"] == 1
+            assert prog["result"]["filter_breakdown"]["location_mismatch"] == 1
+            job_id = prog["result"]["saved_jobs"][0]["id"]
+
+            sessions = client.get("/api/sessions").json()
+            sess_sum = next(s for s in sessions if s["id"] == sess_id)
+            assert sess_sum["sources_used"] == ["ashby"]
+            assert sess_sum["status_counts"].get("ready") == 1
+            assert sess_sum["discarded_count"] == 0
+
+            export_resp = client.post(
+                "/api/export",
+                json={"job_id": job_id, "resume_id": resume_id, "formats": ["pdf"]},
+            )
+            assert export_resp.status_code == 201
+            assert len(list(output_dir.iterdir())) >= 1
+
+            # Partial flush: clear only tailoring runs & exports while keeping jobs + resumes
+            partial = client.post(
+                "/api/data/flush",
+                json={"flush_tailoring_runs": True, "flush_output_files": True},
+            )
+            assert partial.status_code == 200
+            assert partial.json()["tailoring_runs_deleted"] == 1
+            assert partial.json()["sessions_deleted"] == 0
+            assert partial.json()["resumes_deleted"] == 0
+            jobs_after_partial = client.get(f"/api/jobs?session_id={sess_id}").json()
+            assert jobs_after_partial[0]["application_status"] == "ready"
+            assert list(output_dir.iterdir()) == []
+
+            # Master flush: wipes sessions, jobs, seen ledger, outputs, and preserves resumes
+            master = client.post("/api/data/flush", json={"master_flush": True})
+            assert master.status_code == 200
+            m_data = master.json()
+            assert m_data["sessions_deleted"] == 1
+            assert master.json()["jobs_deleted"] == 1
+            assert master.json()["seen_deleted"] >= 1
+            assert master.json()["resumes_deleted"] == 0
+            assert client.get("/api/sessions").json() == []
+            assert client.get("/api/resumes").json()["has_base_resume"] is True
+    finally:
+        mock_http.close()
+
+
+def test_filtered_seen_audit_promote_restore_and_stop_scrape(tmp_path) -> None:
+    """Verify filtered/seen differentiation, multi-select restore to saved list, and mid-run stop."""
+    import threading
+    import time
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    ts_recent = (now - timedelta(minutes=8)).isoformat()
+    li_entered = threading.Event()
+    allow_li_finish = threading.Event()
+
+    gh_jobs = {
+        "jobs": [
+            {
+                "id": 301,
+                "title": "Senior Software Engineer",
+                "location": {"name": "Seattle, WA"},
+                "updated_at": ts_recent,
+                "absolute_url": "https://boards.greenhouse.io/gamma/jobs/301",
+                "content": (
+                    "<p>We build distributed Python and FastAPI backend services in Seattle, WA.</p>"
+                    "<p>We sponsor H-1B visas. $195,000 - $220,000 per year.</p>"
+                ),
+            },
+            {
+                "id": 302,
+                "title": "Senior Software Engineer",
+                "location": {"name": "Austin, TX"},
+                "updated_at": ts_recent,
+                "absolute_url": "https://boards.greenhouse.io/gamma/jobs/302",
+                "content": "<p>Python and AWS distributed systems role in Austin, TX.</p>",
+            },
+            {
+                "id": 303,
+                "title": "Junior Software Engineer",
+                "location": {"name": "Seattle, WA"},
+                "updated_at": ts_recent,
+                "absolute_url": "https://boards.greenhouse.io/gamma/jobs/303",
+                "content": "<p>Entry role in Seattle.</p>",
+            },
+        ]
+    }
+    slow_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal slow_calls
+        url_str = str(request.url)
+        if "boards-api.greenhouse.io/v1/boards/gamma/jobs" in url_str:
+            return httpx.Response(200, json=gh_jobs)
+        if "seeMoreJobPostings/search" in url_str:
+            slow_calls += 1
+            li_entered.set()
+            allow_li_finish.wait(timeout=2.0)
+            return httpx.Response(200, text="<html><body></body></html>")
+        return httpx.Response(404)
+
+    mock_http = httpx.Client(transport=httpx.MockTransport(handler))
+    client, _output_dir = _build_client(tmp_path)
+
+    try:
+        with client:
+            client.app.state.scrape_http_client = mock_http
+            cfg = client.put(
+                "/api/config",
+                json={
+                    "updates": {
+                        "target_role_tracks": ["senior_swe"],
+                        "target_locations": ["Seattle, WA"],
+                        "work_authorization": "h1b",
+                        "job_types": ["full-time"],
+                        "target_salary_min": 150000,
+                        "scraper_sources": ["greenhouse"],
+                        "company_boards": ["greenhouse:gamma"],
+                        "title_blocklist": ["junior", "intern"],
+                    }
+                },
+            )
+            assert cfg.status_code == 200
+            assert client.post("/api/resumes", json=_sample_resume_payload("Main SWE", "senior_swe")).status_code == 201
+
+            # 1) Session 1 captures 1 saved + 2 rule-filtered roles
+            s1 = client.post("/api/sessions", json={"name": "Audit Session 1", "posted_within": "24h"}).json()["id"]
+            r1 = client.post(
+                f"/api/sessions/{s1}/scrape",
+                json={"sources": ["greenhouse"], "company_boards": ["greenhouse:gamma"], "locations": ["Seattle, WA"]},
+            )
+            assert r1.status_code == 200
+            assert r1.json()["saved_count"] == 1
+            assert r1.json()["filtered_count"] == 2
+
+            f1 = client.get(f"/api/sessions/{s1}/filtered").json()
+            assert len(f1) == 2
+            assert {item["category"] for item in f1} == {"auto_filtered"}
+            assert {item["filter_reason"] for item in f1} == {"location_mismatch", "blocked_title"}
+
+            # 2) Session 2 sees all 3 as seen/skipped and differentiates them from rule-filtered
+            s2 = client.post("/api/sessions", json={"name": "Audit Session 2", "posted_within": "24h"}).json()["id"]
+            r2 = client.post(
+                f"/api/sessions/{s2}/scrape",
+                json={"sources": ["greenhouse"], "company_boards": ["greenhouse:gamma"], "locations": ["Seattle, WA"]},
+            )
+            assert r2.status_code == 200
+            assert r2.json()["saved_count"] == 0
+            assert r2.json()["duplicate_skipped_count"] == 3
+
+            sessions_meta = {s["id"]: s for s in client.get("/api/sessions").json()}
+            assert sessions_meta[s2]["seen_skipped_count"] == 3
+
+            f2 = client.get(f"/api/sessions/{s2}/filtered").json()
+            assert len(f2) == 3
+            assert {item["category"] for item in f2} == {"seen_skipped"}
+            seen_reasons = {item["filter_reason"] for item in f2}
+            assert seen_reasons == {"seen:saved", "seen:auto_filtered"}
+
+            # Promote 2 selected rows from s2's Seen/Skipped list into s2's Saved Jobs
+            austin_seen = next(item for item in f2 if "Austin" in item["location"])
+            seattle_seen = next(item for item in f2 if item["filter_reason"] == "seen:saved")
+            promo = client.post(
+                f"/api/sessions/{s2}/filtered/promote",
+                json={"filtered_ids": [seattle_seen["id"], austin_seen["id"]]},
+            )
+            assert promo.status_code == 200
+            assert promo.json()["added_count"] == 2
+            assert promo.json()["already_saved_count"] == 0
+
+            s2_jobs = client.get(f"/api/jobs?session_id={s2}").json()
+            assert len(s2_jobs) == 2
+            # Re-promoting is idempotent
+            promo_again = client.post(
+                f"/api/sessions/{s2}/filtered/promote",
+                json={"filtered_ids": [austin_seen["id"]]},
+            )
+            assert promo_again.status_code == 200
+            assert promo_again.json()["added_count"] == 0
+            assert promo_again.json()["already_saved_count"] == 1
+
+            # Discard & bulk-restore from Discarded tab
+            target_job_id = s2_jobs[0]["id"]
+            assert client.patch(f"/api/jobs/{target_job_id}", json={"disposition": "discarded"}).status_code == 200
+            assert len(client.get(f"/api/jobs?session_id={s2}").json()) == 1
+            assert len(client.get(f"/api/jobs?session_id={s2}&include_discarded=true").json()) == 2
+            restore = client.post(
+                f"/api/sessions/{s2}/discarded/restore",
+                json={"job_ids": [target_job_id]},
+            )
+            assert restore.status_code == 200
+            assert restore.json()["added_count"] == 1
+            assert len(client.get(f"/api/jobs?session_id={s2}").json()) == 2
+
+            # 3) Mid-run Stop Scrape preserves fast board candidates and stops subsequent LinkedIn queries
+            gh_jobs["jobs"][0]["id"] = 304
+            gh_jobs["jobs"][0]["absolute_url"] = "https://boards.greenhouse.io/gamma/jobs/304"
+            gh_jobs["jobs"][0]["title"] = "Senior Software Engineer II"
+            s3 = client.post("/api/sessions", json={"name": "Stoppable Session", "posted_within": "24h"}).json()["id"]
+            start = client.post(
+                f"/api/sessions/{s3}/scrape/start",
+                json={
+                    "sources": ["greenhouse", "linkedin"],
+                    "company_boards": ["greenhouse:gamma"],
+                    "role_tracks": ["senior_swe", "ai_engineer"],
+                    "locations": ["Seattle, WA"],
+                },
+            )
+            assert start.status_code == 200
+            assert li_entered.wait(timeout=3.0)
+            stop_resp = client.post(f"/api/sessions/{s3}/scrape/stop")
+            assert stop_resp.status_code == 200
+            allow_li_finish.set()
+
+            prog = stop_resp.json()
+            for _ in range(50):
+                if prog["status"] in ("cancelled", "completed", "failed"):
+                    break
+                time.sleep(0.03)
+                prog = client.get(f"/api/sessions/{s3}/scrape/progress").json()
+
+            assert prog["status"] == "cancelled", prog
+            assert prog["result"]["cancelled"] is True
+            assert slow_calls == 1
+            # Job 304 from Greenhouse board fetched before stop was preserved!
+            s3_jobs = client.get(f"/api/jobs?session_id={s3}").json()
+            assert len(s3_jobs) == 1
+            assert s3_jobs[0]["analysis"]["title"] == "Senior Software Engineer II"
+
+            # Master flush deletes SessionFilteredJobRecord without FK errors
+            flush_res = client.post("/api/data/flush", json={"master_flush": True})
+            assert flush_res.status_code == 200
+            assert client.get("/api/sessions").json() == []
+    finally:
+        allow_li_finish.set()
+        mock_http.close()
+
+
+def test_us_only_default_primary_location_and_all_unsuitability_reasons(tmp_path: Path) -> None:
+    """Verify US-only default even when locations=[] and capture of ALL unsuitability reasons."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    recent_iso = (now - timedelta(minutes=15)).isoformat()
+    stale_iso = (now - timedelta(days=3)).isoformat()
+
+    gh_jobs = {
+        "jobs": [
+            {
+                "id": 401,
+                "title": "Senior Software Engineer",
+                "location": {"name": "Chicago, IL"},
+                "updated_at": recent_iso,
+                "absolute_url": "https://boards.greenhouse.io/usonly/jobs/401",
+                "content": "<p>Python and Go microservices in Chicago, IL. We sponsor H-1B visas.</p>",
+            },
+            {
+                "id": 402,
+                "title": "Junior Account Executive",
+                "location": {"name": "Toronto, ON"},
+                "updated_at": stale_iso,
+                "absolute_url": "https://boards.greenhouse.io/usonly/jobs/402",
+                "content": (
+                    "<p>We cannot sponsor visas for this role. Salary $95,000 per year.</p>"
+                ),
+            },
+            {
+                "id": 403,
+                "title": "Senior AI Engineer",
+                "location": {"name": "Remote, Europe"},
+                "updated_at": recent_iso,
+                "absolute_url": "https://boards.greenhouse.io/usonly/jobs/403",
+                "content": "<p>Remote engineering across EMEA.</p>",
+            },
+        ]
+    }
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if "boards-api.greenhouse.io/v1/boards/usonly/jobs" in str(request.url):
+            return httpx.Response(200, json=gh_jobs)
+        return httpx.Response(404)
+
+    mock_http = httpx.Client(transport=httpx.MockTransport(_handler))
+    client, _ = _build_client(tmp_path)
+    try:
+        with client:
+            client.app.state.scrape_http_client = mock_http
+            cfg = client.put(
+                "/api/config",
+                json={
+                    "updates": {
+                        "target_role_tracks": ["senior_swe", "ai_engineer"],
+                        "target_locations": [],
+                        "work_authorization": "h1b",
+                        "job_types": ["full-time"],
+                        "target_salary_min": 175000,
+                        "scraper_sources": ["greenhouse"],
+                        "company_boards": ["greenhouse:usonly"],
+                        "title_blocklist": ["junior", "account executive"],
+                    }
+                },
+            )
+            assert cfg.status_code == 200
+
+            s1 = client.post("/api/sessions", json={"name": "US Default Run", "posted_within": "24h"}).json()["id"]
+            resp = client.post(
+                f"/api/sessions/{s1}/scrape",
+                json={
+                    "sources": ["greenhouse"],
+                    "company_boards": ["greenhouse:usonly"],
+                    "locations": [],
+                },
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            # Chicago, IL (US) passes by default; Toronto, ON & Remote, Europe are blocked by US guard
+            assert data["saved_count"] == 1
+            assert data["saved_jobs"][0]["analysis"]["location"] == "Chicago, IL"
+            assert data["filtered_count"] == 2
+
+            filtered = client.get(f"/api/sessions/{s1}/filtered").json()
+            assert len(filtered) == 2
+            toronto = next(item for item in filtered if "Toronto" in item["location"])
+            assert toronto["filter_reason"] == "location_mismatch"
+            assert set(toronto["filter_reasons"]) >= {
+                "location_mismatch",
+                "stale_outside_window",
+                "blocked_title",
+                "role_mismatch",
+                "no_h1b_sponsorship",
+                "below_min_salary",
+            }
+            assert len(toronto["suitability_notes"]) >= 5
+            europe = next(item for item in filtered if "Europe" in item["location"])
+            assert europe["filter_reason"] == "location_mismatch"
+    finally:
+        mock_http.close()
+
+
+def test_expanded_role_tracks_level_disambiguation(tmp_path: Path) -> None:
+    """Verify Staff vs Mid vs Founding/MTS aliases match their intended level without leakage."""
+    from datetime import datetime, timedelta, timezone
+
+    now_iso = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    gh_jobs = {
+        "jobs": [
+            {
+                "id": 501,
+                "title": "Staff Member of Technical Staff",
+                "location": {"name": "San Francisco, CA"},
+                "updated_at": now_iso,
+                "absolute_url": "https://boards.greenhouse.io/frontier/jobs/501",
+                "content": "<p>8+ years experience leading distributed LLM architecture in Python and Go. We sponsor H-1B.</p>",
+            },
+            {
+                "id": 502,
+                "title": "Member of Technical Staff",
+                "location": {"name": "San Francisco, CA"},
+                "updated_at": now_iso,
+                "absolute_url": "https://boards.greenhouse.io/frontier/jobs/502",
+                "content": "<p>3+ years experience shipping production APIs. We sponsor H-1B.</p>",
+            },
+            {
+                "id": 503,
+                "title": "Founding AI Engineer",
+                "location": {"name": "New York, NY"},
+                "updated_at": now_iso,
+                "absolute_url": "https://boards.greenhouse.io/frontier/jobs/503",
+                "content": "<p>Build 0 to 1 product in TypeScript, React, Python. We sponsor H-1B.</p>",
+            },
+        ]
+    }
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if "boards-api.greenhouse.io/v1/boards/frontier/jobs" in str(request.url):
+            return httpx.Response(200, json=gh_jobs)
+        return httpx.Response(404)
+
+    mock_http = httpx.Client(transport=httpx.MockTransport(_handler))
+    client, _ = _build_client(tmp_path)
+    try:
+        with client:
+            client.app.state.scrape_http_client = mock_http
+            assert (
+                client.put(
+                    "/api/config",
+                    json={
+                        "updates": {
+                            "target_role_tracks": ["staff_swe", "founding_engineer"],
+                            "target_locations": ["ALL_US"],
+                            "work_authorization": "h1b",
+                            "target_yoe_min": None,
+                            "target_yoe_max": None,
+                            "scraper_sources": ["greenhouse"],
+                            "company_boards": ["greenhouse:frontier"],
+                            "title_blocklist": ["intern"],
+                        }
+                    },
+                ).status_code
+                == 200
+            )
+            s1 = client.post("/api/sessions", json={"name": "Role Levels", "posted_within": "24h"}).json()["id"]
+            resp = client.post(
+                f"/api/sessions/{s1}/scrape",
+                json={
+                    "role_tracks": ["staff_swe", "founding_engineer"],
+                    "sources": ["greenhouse"],
+                    "company_boards": ["greenhouse:frontier"],
+                    "locations": ["ALL_US"],
+                },
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["saved_count"] == 2
+            by_title = {j["analysis"]["title"]: j["analysis"]["role_track"] for j in data["saved_jobs"]}
+            assert by_title == {
+                "Staff Member of Technical Staff": "staff_swe",
+                "Founding AI Engineer": "founding_engineer",
+            }
+            filtered = client.get(f"/api/sessions/{s1}/filtered").json()
+            assert len(filtered) == 1
+            assert filtered[0]["title"] == "Member of Technical Staff"
+            assert filtered[0]["filter_reason"] == "role_mismatch"
+    finally:
+        mock_http.close()
+
+
+def test_reports_clean_capitalization_and_no_paths(tmp_path: Path) -> None:
+    """Verify Reports API returns clean capitalized labels and exposes zero local file paths."""
+    client, _ = _build_client(tmp_path)
+    with client:
+        boot = client.post(
+            "/api/resumes/bootstrap",
+            json={"full_name": "Alex Rivera", "role_track": "senior_swe", "use_llm": False, "save_as_base": True},
+        )
+        assert boot.status_code == 201
+        res_id = boot.json()["resume"]["id"]
+
+        sess = client.post("/api/sessions", json={"name": "Capitalization Check", "posted_within": "24h"}).json()
+        ingest = client.post(
+            "/api/jobs/ingest",
+            json={
+                "session_id": sess["id"],
+                "raw_text": (
+                    "Senior Software Engineer\nCompany: Stripe\nLocation: Seattle, WA\n"
+                    "Requirements: Python, FastAPI, Docker, Kubernetes, PostgreSQL, Redis, CI/CD.\n"
+                ),
+            },
+        )
+        assert ingest.status_code == 201
+        job_id = ingest.json()["id"]
+
+        exp = client.post(
+            "/api/export",
+            json={"job_id": job_id, "resume_id": res_id, "formats": ["docx"]},
+        )
+        assert exp.status_code == 201
+
+        rep_resp = client.get("/api/reports")
+        assert rep_resp.status_code == 200
+        rep = rep_resp.json()
+        assert rep["html_report_path"] is None
+        role_labels = [b["label"] for b in rep["by_role"]]
+        source_labels = [b["label"] for b in rep["by_source"]]
+        status_labels = [b["label"] for b in rep["by_status"]]
+        assert "Senior Software Engineer" in role_labels
+        assert "senior_swe" not in role_labels
+        assert "Resume Created" in status_labels
+        assert "resume_created" not in status_labels
+        assert all("_" not in lbl for lbl in source_labels + status_labels + role_labels)
+
+
+def test_bulk_session_export_auto_seniority_and_zip(tmp_path: Path) -> None:
+    """Verify bulk session export auto-sizes 6-8 YoE senior roles, targets 80-85% band, and serves zip."""
+    client, _ = _build_client(tmp_path)
+    with client:
+        boot = client.post(
+            "/api/resumes/bootstrap",
+            json={
+                "full_name": "Alex Rivera",
+                "role_track": "senior_swe",
+                "years_experience": 7,
+                "employers": [
+                    {"company": "Amazon", "title": "Senior SWE", "start_date": "Jan 2022", "end_date": "Present", "bullets_count": 6},
+                    {"company": "Intuit", "title": "SWE II", "start_date": "Jan 2020", "end_date": "Dec 2021", "bullets_count": 5},
+                ],
+                "use_llm": False,
+                "save_as_base": True,
+            },
+        )
+        assert boot.status_code == 201
+        res_id = boot.json()["resume"]["id"]
+
+        sess_id = client.post("/api/sessions", json={"name": "Bulk Test", "posted_within": "24h"}).json()["id"]
+        j1 = client.post(
+            "/api/jobs/ingest",
+            json={
+                "session_id": sess_id,
+                "raw_text": (
+                    "Senior Distributed Systems Engineer\nCompany: Databricks\nLocation: San Francisco, CA\n"
+                    "6-8 years experience building scalable Python, Go, Kafka, Spark, Kubernetes, Docker, "
+                    "PostgreSQL, Terraform, and CI/CD infrastructure.\n"
+                ),
+            },
+        ).json()["id"]
+        j2 = client.post(
+            "/api/jobs/ingest",
+            json={
+                "session_id": sess_id,
+                "raw_text": (
+                    "Software Engineer II\nCompany: Figma\nLocation: New York, NY\n"
+                    "3 years experience with TypeScript, Python, React, PostgreSQL, Redis, Docker, and AWS.\n"
+                ),
+            },
+        ).json()["id"]
+
+        bulk_resp = client.post(
+            f"/api/sessions/{sess_id}/bulk-export",
+            json={
+                "resume_id": res_id,
+                "formats": ["docx"],
+                "tailor_strategy": "fallback_script",
+                "auto_size": True,
+                "target_score_min": 80,
+                "target_score_max": 85,
+            },
+        )
+        assert bulk_resp.status_code == 200
+        bulk = bulk_resp.json()
+        assert bulk["total_saved_jobs"] == 2
+        assert bulk["succeeded_count"] == 2
+        assert bulk["failed_count"] == 0
+        by_job = {item["job_id"]: item for item in bulk["items"]}
+        assert by_job[j1]["page_budget"] == 2.0
+        assert by_job[j1]["bullets_per_role_counts"][0] >= 6
+        assert any(f.endswith(f"_J{j1}_R{by_job[j1]['run_id']}.docx") for f in by_job[j1]["generated_files"])
+        assert any(f.endswith(f"_J{j2}_R{by_job[j2]['run_id']}.docx") for f in by_job[j2]["generated_files"])
+        assert 80.0 <= by_job[j1]["tailored_score"] <= 85.0
+        assert 80.0 <= by_job[j2]["tailored_score"] <= 85.0
+
+        zip_resp = client.get(bulk["zip_download_url"])
+        assert zip_resp.status_code == 200
+        assert "application/zip" in zip_resp.headers["content-type"]
+        assert zip_resp.content[:2] == b"PK"
+

@@ -21,7 +21,7 @@ from backend.app.schemas.config import (
 )
 
 SETTINGS_HEADER = (
-    "# Project Job Mark1 — Runtime Configuration (Two-Way Synced with UI)\n"
+    "# CareerFlow — Runtime Configuration (Two-Way Synced with UI)\n"
     "# Any edits here automatically reflect in the Backend & UI.\n\n"
 )
 
@@ -91,14 +91,18 @@ class ConfigManager:
 
         mtime_ns = self.settings_path.stat().st_mtime_ns
         if self._cached_settings is not None and mtime_ns == self._settings_mtime_ns:
-            return self._cached_settings
+            cached = self._cached_settings
+        else:
+            raw = _read_yaml_file(self.settings_path)
+            cached = AppSettings.model_validate(raw)
+            self._validate_track_references(cached.target_role_tracks)
+            self._cached_settings = cached
+            self._settings_mtime_ns = mtime_ns
 
-        raw = _read_yaml_file(self.settings_path)
-        settings = AppSettings.model_validate(raw)
-        self._validate_track_references(settings.target_role_tracks)
-        self._cached_settings = settings
-        self._settings_mtime_ns = mtime_ns
-        return settings
+        env_ollama_url = os.getenv("CAREERFLOW_OLLAMA_BASE_URL", "").strip()
+        if env_ollama_url and cached.ollama_base_url != env_ollama_url:
+            return cached.model_copy(update={"ollama_base_url": env_ollama_url})
+        return cached
 
     def update_settings(self, updates: dict[str, Any]) -> ConfigResponse:
         """Validate partial updates, persist atomically to YAML, and return full config."""
@@ -107,7 +111,8 @@ class ConfigManager:
         if unknown_keys:
             raise ValueError(f"Unknown config field(s): {', '.join(unknown_keys)}")
 
-        current = self.get_settings().model_dump()
+        disk_raw = _read_yaml_file(self.settings_path) if self.settings_path.exists() else {}
+        current = AppSettings.model_validate(disk_raw).model_dump() if disk_raw else self.get_settings().model_dump()
         merged = {**current, **updates}
         validated = AppSettings.model_validate(merged)
         self._validate_track_references(validated.target_role_tracks)
@@ -118,7 +123,7 @@ class ConfigManager:
         return self.get_config_response()
 
     def list_role_tracks(self) -> list[RoleTrackConfig]:
-        """Return all role tracks from config/role_tracks/*.yaml, reloading on disk edits."""
+        """Return all role tracks from config/role_tracks/*.yaml in ladder/domain order."""
         if not self.role_tracks_dir.exists():
             return []
 
@@ -127,14 +132,40 @@ class ConfigManager:
         if signature == self._tracks_signature and self._cached_tracks:
             return list(self._cached_tracks.values())
 
-        tracks: dict[str, RoleTrackConfig] = {}
+        loaded: list[RoleTrackConfig] = []
         for file_path in files:
             raw = _read_yaml_file(file_path)
             if not raw:
                 continue
             track = RoleTrackConfig.model_validate(raw)
-            tracks[track.id] = track
+            if not track.typical_yoe_label and len(track.target_yoe_range) >= 2:
+                track.typical_yoe_label = f"{track.target_yoe_range[0]}–{track.target_yoe_range[1]} yrs"
+            loaded.append(track)
 
+        preferred_order = [
+            "entry_swe",
+            "mid_swe",
+            "senior_swe",
+            "staff_swe",
+            "principal_swe",
+            "ai_engineer",
+            "ml_engineer",
+            "applied_scientist",
+            "mlops_ai_infra",
+            "data_engineer",
+            "data_scientist",
+            "backend_systems",
+            "fullstack_product",
+            "founding_engineer",
+            "fde",
+            "platform_infra",
+            "security_engineer",
+            "solutions_architect",
+        ]
+        order_idx = {tid: idx for idx, tid in enumerate(preferred_order)}
+        loaded.sort(key=lambda t: (order_idx.get(t.id, 999), t.display_name.lower()))
+
+        tracks = {t.id: t for t in loaded}
         self._cached_tracks = tracks
         self._tracks_signature = signature
         return list(tracks.values())
@@ -148,24 +179,42 @@ class ConfigManager:
         return track
 
     def infer_role_track_for_title(self, title: str, preferred_ids: list[str] | None = None) -> str:
-        """Infer best matching RoleTrack id from job title and aliases."""
+        """Infer best matching RoleTrack id from job title and aliases using longest-match scoring."""
         tracks = self.list_role_tracks()
         if not tracks:
             return "senior_swe"
 
-        lower_title = title.lower()
+        lower_title = f" {title.lower()} "
         candidates = [t for t in tracks if not preferred_ids or t.id in preferred_ids] or tracks
+        best_id = candidates[0].id
+        best_score = -1
         for track in candidates:
             terms = [track.display_name, *track.aliases]
-            if any(term.lower() in lower_title for term in terms if term.strip()):
-                return track.id
-        return candidates[0].id
+            for term in terms:
+                norm = term.strip().lower()
+                if not norm:
+                    continue
+                if norm in lower_title and len(norm) > best_score:
+                    best_score = len(norm)
+                    best_id = track.id
+        return best_id
 
     def update_role_track(self, track_id: str, patch: RoleTrackUpdateRequest) -> RoleTrackConfig:
-        """Persist role track keyword, alias, or weight updates back to its YAML file."""
+        """Persist role track keyword, alias, level, or weight updates back to its YAML file."""
         existing = self.get_role_track(track_id)
         updated_data = existing.model_dump()
-        for field_name in ("display_name", "aliases", "description", "keywords", "weights"):
+        for field_name in (
+            "display_name",
+            "category",
+            "typical_yoe_label",
+            "search_query",
+            "company_examples",
+            "target_yoe_range",
+            "aliases",
+            "description",
+            "keywords",
+            "weights",
+        ):
             value = getattr(patch, field_name)
             if value is not None:
                 updated_data[field_name] = value.model_dump() if hasattr(value, "model_dump") else value
@@ -231,8 +280,16 @@ class ConfigManager:
         track_options = [
             ConfigOption(
                 value=t.id,
-                label=f"{t.display_name}" + (f" ({', '.join(t.aliases[:2])})" if t.aliases else ""),
-                description=t.description,
+                label=(
+                    f"{t.display_name} ({t.typical_yoe_label})"
+                    if t.typical_yoe_label
+                    else t.display_name
+                ),
+                description=(
+                    f"{', '.join(t.company_examples[:4])} — {t.description}"
+                    if t.company_examples
+                    else t.description
+                ),
             )
             for t in tracks
         ]
@@ -248,13 +305,38 @@ class ConfigManager:
             (
                 "page_budget",
                 "Resume Page Limit",
-                "1 page is the standard for Big Tech roles; 2 pages for broader 6–8+ year scope.",
+                "Select 1, 1.5, or 2 pages depending on your preferred bullet density and history depth.",
                 "select",
                 True,
                 [
-                    ConfigOption(value=1, label="1 Page (Standard)"),
-                    ConfigOption(value=2, label="2 Pages (Extended)"),
+                    ConfigOption(value=1, label="1 Page (Compact Standard)"),
+                    ConfigOption(value=1.5, label="1.5 Pages (Balanced Senior)"),
+                    ConfigOption(value=2, label="2 Pages (Extended Experience)"),
                 ],
+            ),
+            (
+                "default_bullets_per_role",
+                "Bullets per Experience Role",
+                "Default number of tailored bullet points generated per work experience entry.",
+                "number",
+                False,
+                [],
+            ),
+            (
+                "avoided_ai_words",
+                "Avoided AI Words / Phrases",
+                "Banned clichés excluded from LLM prompts and humanizer output (deselect or add words in Tailoring Studio).",
+                "tags",
+                False,
+                [],
+            ),
+            (
+                "custom_tailor_instructions",
+                "Custom Tailoring Instructions",
+                "Optional extra guidance injected into every resume tailoring prompt.",
+                "text",
+                False,
+                [],
             ),
             (
                 "target_salary_min",
@@ -267,10 +349,15 @@ class ConfigManager:
             (
                 "llm_mode",
                 "AI Tailoring Mode",
-                "Run fast built-in rules now, or switch to the local Docker AI container when ready.",
+                "Use fast deterministic rules or invoke a single local Ollama model for tailoring, XYZ bootstrapping, and humanization.",
                 "select",
                 True,
                 [
+                    ConfigOption(
+                        value="ollama_local",
+                        label="Local Ollama AI (Single Model — Recommended)",
+                        description="Runs tailoring, generic 5-year bootstrap, and anti-AI-slop humanizer on your local Ollama model.",
+                    ),
                     ConfigOption(
                         value="off",
                         label="Built-In Rules Only (Fast & Offline)",
@@ -279,9 +366,33 @@ class ConfigManager:
                     ConfigOption(
                         value="ollama_docker",
                         label="Local Docker AI (Ollama Container)",
-                        description="Uses the project Dockerized open-source model container.",
+                        description="Uses Ollama endpoint via Docker or custom host port.",
                     ),
                 ],
+            ),
+            (
+                "llm_model",
+                "Single Local Ollama Model",
+                "One open-source Ollama model handles resume tailoring, generic bootstrap, and humanizer rewrites.",
+                "text",
+                False,
+                [],
+            ),
+            (
+                "ollama_base_url",
+                "Ollama Endpoint URL",
+                "Local or Docker Ollama API URL (default: http://localhost:11434).",
+                "text",
+                False,
+                [],
+            ),
+            (
+                "strict_humanizer_gate",
+                "Strict Humanizer Anti-Slop Gate",
+                "Always scrub AI cliches, passive openers, and repeated action verbs before preview or export.",
+                "boolean",
+                False,
+                [],
             ),
         ]
 
@@ -363,19 +474,20 @@ class ConfigManager:
                 (
                     "scraper_sources",
                     "Job Sources",
-                    "Boards queried during live batch scraping.",
+                    "Top recruiting sources queried during batch scraping.",
                     "multi_select",
                     False,
                     [
-                        ConfigOption(value="greenhouse", label="Greenhouse Boards"),
-                        ConfigOption(value="lever", label="Lever Boards"),
                         ConfigOption(value="linkedin", label="LinkedIn Public Search"),
+                        ConfigOption(value="greenhouse", label="Greenhouse Boards"),
+                        ConfigOption(value="ashby", label="Ashby Boards"),
+                        ConfigOption(value="lever", label="Lever Boards"),
                     ],
                 ),
                 (
                     "company_boards",
                     "Company Boards",
-                    "ATS boards to scan in provider:slug format (e.g., greenhouse:anthropic, lever:palantir).",
+                    "ATS boards in provider:slug format (e.g., greenhouse:anthropic, ashby:openai, lever:palantir).",
                     "tags",
                     False,
                     [],

@@ -19,36 +19,70 @@ ats_formatting:
   single_column_only: true
   disallow_tables_and_sidebars: true
   disallow_icons_and_skill_bars: true
-  disallow_summary_by_default: true
+  disallow_summary_by_default: false
   require_selectable_pdf_text: true
   standard_headings:
-    - "Education"
+    - "Summary"
     - "Experience"
     - "Projects"
     - "Technical Skills"
+    - "Education"
   margin_inches: 0.5
 
 bullet_quality:
   prefer_xyz_formula: true # Accomplished [X] as measured by [Y], by doing [Z]
-  min_quantified_bullet_ratio: 0.5
-  max_bullet_chars: 220
+  min_quantified_bullet_ratio: 0.45
+  max_bullet_chars: 260
   strong_action_verbs:
+    - "accelerated"
     - "architected"
-    - "built"
-    - "designed"
-    - "engineered"
-    - "scaled"
-    - "optimized"
-    - "reduced"
-    - "migrated"
+    - "authored"
     - "automated"
-    - "led"
-    - "owned"
-    - "delivered"
-    - "implemented"
-    - "deployed"
+    - "boosted"
+    - "built"
+    - "coordinated"
+    - "created"
     - "cut"
+    - "decreased"
+    - "delivered"
+    - "deployed"
+    - "designed"
+    - "developed"
+    - "directed"
+    - "drove"
+    - "engineered"
+    - "established"
+    - "executed"
+    - "fine-tuned"
+    - "guided"
+    - "implemented"
     - "improved"
+    - "integrated"
+    - "launched"
+    - "led"
+    - "lowered"
+    - "maintained"
+    - "managed"
+    - "migrated"
+    - "modeled"
+    - "operated"
+    - "optimized"
+    - "owned"
+    - "produced"
+    - "raised"
+    - "reduced"
+    - "redesigned"
+    - "refactored"
+    - "right-sized"
+    - "scaled"
+    - "shipped"
+    - "streamlined"
+    - "strengthened"
+    - "structured"
+    - "trimmed"
+    - "tuned"
+    - "unified"
+    - "upgraded"
   weak_phrases:
     - "responsible for"
     - "helped with"
@@ -59,11 +93,14 @@ bullet_quality:
 
 humanizer_guardrails:
   ai_slop_banlist:
+    - "slashed"
     - "spearheaded"
     - "leveraged"
+    - "utilized"
     - "synergized"
     - "revolutionized"
     - "cutting-edge"
+    - "state-of-the-art"
     - "game-changing"
     - "seamlessly"
     - "delved"
@@ -71,6 +108,12 @@ humanizer_guardrails:
     - "holistic"
     - "paradigm shift"
     - "best-in-class"
+    - "fostering"
+    - "orchestrated"
+    - "pioneered"
+    - "supercharged"
+    - "skyrocketed"
+    - "myriad"
   max_same_verb_repeats: 2
 
 scoring_weights:

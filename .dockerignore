@@ -1,0 +1,16 @@
+.git
+.venv
+.pytest_cache
+__pycache__
+*.py[cod]
+.env
+data
+output
+*.db
+*.sqlite3
+frontend/node_modules
+frontend/dist
+careerflow.db
+README.md
+REQUIREMENTS.md
+backend/tests

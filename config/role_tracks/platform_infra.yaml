@@ -1,14 +1,28 @@
 id: platform_infra
-display_name: Platform & Infrastructure Engineer
+display_name: Platform, Cloud & SRE Engineer
+category: engineering_specialty
+typical_yoe_label: 4–8 yrs
+search_query: Platform SRE Infrastructure Engineer
+company_examples:
+  - Google SRE
+  - Meta Production Engineer
+  - Cloudflare Infra Engineer
+  - Databricks Cloud Platform
+  - Stripe Infrastructure
 aliases:
-  - Senior Infrastructure Engineer
+  - Platform Engineer
   - Senior Platform Engineer
+  - Senior Infrastructure Engineer
   - Cloud Infrastructure Engineer
   - Production Engineer
   - Distributed Compute Engineer
+  - Site Reliability Engineer
   - Senior Site Reliability Engineer
-  - Staff SRE
-description: 4-8 YoE Kubernetes orchestration, cloud compute, observability, and high-reliability infrastructure
+  - SRE
+  - DevOps Engineer
+  - Senior DevOps Engineer
+  - Cloud Engineer
+description: 4–8 YoE · Kubernetes orchestration, Terraform, multi-cloud compute, observability & high-reliability production ops
 target_yoe_range:
   - 4
   - 8

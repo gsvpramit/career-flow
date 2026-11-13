@@ -12,7 +12,7 @@ Build a local-first web application (Frontend + Backend + Persistent Storage) th
 ### Design Goals
 1. **Big Tech Recruiter & ATS Ready:** Output adheres strictly to FAANG/MANG-grade single-column formatting, XYZ impact bullets, and zero parser-breaking tables/icons.
 2. **Low-AI / High-Signal Pipeline:** Prefer deterministic NLP, structured rules, and explicit scoring over heavy opaque LLM generation. A local Dockerized LLM handles targeted reasoning (messy JD structuring, optional bullet reframing), gated by sanity checks, anti-AI-slop humanizing, and grammar validation.
-3. **Human-in-the-Loop Truthfulness:** Immutable career facts (company names, titles, dates, degrees) stay locked. Tailoring selects/reframes work from a Master Experience Bank and clearly tags any suggested/adapted bullets for explicit user review before export.
+3. **Human-in-the-Loop:** Immutable career facts (company names, titles, dates, degrees) stay locked. Tailoring selects/reframes work from a Master Experience Bank and clearly tags any suggested/adapted bullets for explicit user review before export.
 4. **UI-First Configurability (Two-Way Sync):** Everything configurable in local config files is controllable via UI dropdowns/forms—and edits in either the UI or the local config file stay synchronized.
 5. **Build-and-Test Incrementally:** Every module ships with runnable `pytest` tests and clear UI verification from Day 1.
 

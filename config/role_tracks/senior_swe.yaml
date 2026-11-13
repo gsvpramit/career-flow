@@ -1,25 +1,38 @@
 id: senior_swe
 display_name: Senior Software Engineer
+category: swe_levels
+typical_yoe_label: 5–8 yrs
+search_query: Senior Software Engineer
+company_examples:
+- Google L5
+- Meta E5
+- Amazon SDE II / III
+- Databricks L5
+- Coinbase IC5
+- Anthropic Senior MTS
 aliases:
-  - Senior Software Engineer
-  - Software Development Engineer
-  - Senior Software Development Engineer
-  - SDE 2
-  - SDE II
-  - SDE 3
-  - Software Engineer II
-  - Software Engineer III
-  - L5 Software Engineer
-  - IC4 Software Engineer
-  - Senior SWE
-  - Staff Software Engineer
-  - Senior Backend Engineer
-  - Senior Full Stack Engineer
-  - Senior Systems Engineer
-description: 4-8 YoE backend/distributed systems & full-lifecycle production engineering
+- Senior Software Engineer
+- Software Development Engineer
+- Senior Software Development Engineer
+- SDE 2
+- SDE II
+- SDE 3
+- SDE III
+- Software Engineer III
+- L5 Software Engineer
+- E5 Software Engineer
+- IC5 Software Engineer
+- ICT4 Software Engineer
+- Level 65 Software Engineer
+- Senior SWE
+- Senior Member of Technical Staff
+- Senior MTS
+- Senior Systems Engineer
+description: 5–8 YoE · Google L5, Meta E5, Amazon SDE II/III, Databricks L5, Senior
+  MTS — owns complex projects & technical design end-to-end
 target_yoe_range:
-  - 4
-  - 8
+- 5
+- 8
 weights:
   core_must_have: 3.0
   important_systems: 2.0
@@ -27,50 +40,53 @@ weights:
   bonus_nice_to_have: 1.0
 keywords:
   core_must_have:
-    - python
-    - go
-    - java
-    - c++
-    - typescript
-    - distributed systems
-    - microservices
-    - rest api
-    - grpc
-    - postgresql
-    - redis
-    - kafka
-    - kubernetes
-    - docker
-    - aws
-    - gcp
+  - python
+  - go
+  - java
+  - c++
+  - typescript
+  - distributed systems
+  - microservices
+  - rest api
+  - grpc
+  - postgresql
+  - redis
+  - kafka
+  - kubernetes
+  - docker
+  - aws
+  - gcp
   important_systems:
-    - system design
-    - high availability
-    - fault tolerance
-    - observability
-    - prometheus
-    - grafana
-    - ci/cd
-    - terraform
-    - caching
-    - sharding
-    - concurrency
-    - latency
-    - throughput
+  - system design
+  - high availability
+  - fault tolerance
+  - observability
+  - prometheus
+  - grafana
+  - ci/cd
+  - terraform
+  - caching
+  - sharding
+  - concurrency
+  - latency
+  - throughput
+  - Apache Spark
+  - Generative AI
+  - on-call
   senior_leadership:
-    - architecture
-    - technical roadmap
-    - mentorship
-    - code review
-    - rfc
-    - cross-functional
-    - on-call
-    - sla
-    - slo
+  - architecture
+  - technical roadmap
+  - mentorship
+  - code review
+  - rfc
+  - cross-functional
+  - on-call
+  - sla
+  - slo
   bonus_nice_to_have:
-    - graphql
-    - elasticsearch
-    - clickhouse
-    - spark
-    - dynamodb
-    - azure
+  - graphql
+  - elasticsearch
+  - clickhouse
+  - spark
+  - dynamodb
+  - azure

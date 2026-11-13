@@ -1,63 +1,92 @@
-# Project Job Mark1 — Runtime Configuration (Two-Way Synced with UI)
+# CareerFlow — Runtime Configuration (Two-Way Synced with UI)
 # Any edits here automatically reflect in the Backend & UI.
 
 target_role_tracks:
-  - "senior_swe"
-  - "ai_engineer"
-  - "fde"
+- senior_swe
 target_locations:
-  - "Seattle, WA"
-  - "San Diego, CA"
-  - "San Francisco, CA"
-  - "Remote"
+- ALL_US
 work_types:
-  - "remote"
-  - "hybrid"
-  - "onsite"
+- remote
+- hybrid
+- onsite
 job_types:
-  - "full-time"
-work_authorization: "h1b"          # Options: h1b | any | us_citizen_gc_only
-posted_within_default: "24h"       # Options: 1h | 12h | 24h | 7d | any
-target_yoe_min: 4
-target_yoe_max: 8
-target_salary_min: null            # Annual USD floor (postings without salary are kept)
-min_hourly_rate: null              # Hourly USD floor for contracts (omitted rate kept)
-min_relevance_score: 0             # 0-100 minimum match threshold during batch scraping
-scraper_sources:
-  - "greenhouse"
-  - "lever"
-  - "linkedin"
-company_boards:
-  - "greenhouse:anthropic"
-  - "greenhouse:databricks"
-  - "greenhouse:scaleai"
-  - "greenhouse:stripe"
-  - "lever:palantir"
-title_blocklist:
-  - "intern"
-  - "junior"
-  - "entry level"
-  - "director"
-  - "vp "
-  - "vice president"
-  - "chief"
-  - "hardware engineer"
-  - "mechanical engineer"
-  - "civil engineer"
-  - "account executive"
-  - "recruiter"
-  - "nurse"
-  - "gtm "
-  - "strategy & operations"
-  - "finance systems"
-  - "tax"
-resume_filename_format: "{full_name}_{company}_{role}"
+- full-time
+work_authorization: h1b
+posted_within_default: 24h
+llm_mode: ollama_local
+llm_model: mistral-nemo:latest
+ollama_base_url: http://localhost:11434
 export_formats:
-  - "pdf"
-  - "docx"
-page_budget: 1                     # Options: 1 | 2
-llm_mode: "off"                    # Options: off | ollama_docker
-llm_model: "qwen3:14b"
-ollama_base_url: "http://localhost:11434"
+- pdf
+- docx
+page_budget: 1
+default_bullets_per_role: 5
+avoided_ai_words:
+- slashed
+- spearheaded
+- leveraged
+- utilized
+- synergized
+- revolutionized
+- cutting-edge
+- state-of-the-art
+- best-in-class
+- game-changing
+- seamlessly
+- delved
+- tapestry
+- holistic
+- paradigm shift
+- fostering
+- orchestrated
+- pioneered
+- supercharged
+- skyrocketed
+- myriad
+custom_tailor_instructions: ''
+target_yoe_min: 2
+target_yoe_max: 10
+target_salary_min: null
+min_hourly_rate: null
+min_relevance_score: 0
+scraper_sources:
+- lever
+- linkedin
+- greenhouse
+- ashby
+company_boards:
+- greenhouse:anthropic
+- greenhouse:databricks
+- greenhouse:scaleai
+- greenhouse:stripe
+- greenhouse:cloudflare
+- greenhouse:coinbase
+- greenhouse:figma
+- ashby:openai
+- ashby:ramp
+- ashby:linear
+- ashby:notion
+- ashby:perplexity
+- lever:palantir
+- lever:spotify
+title_blocklist:
+- intern
+- junior
+- entry level
+- director
+- vp
+- vice president
+- chief
+- hardware engineer
+- mechanical engineer
+- civil engineer
+- account executive
+- recruiter
+- nurse
+- gtm
+- strategy & operations
+- finance systems
+- tax
+resume_filename_format: '{full_name}_{company}_{role}'
 strict_humanizer_gate: true
-output_dir: "output"
+output_dir: output

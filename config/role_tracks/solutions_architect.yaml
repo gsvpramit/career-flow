@@ -1,0 +1,66 @@
+id: solutions_architect
+display_name: Solutions Architect / Customer Engineer
+category: engineering_specialty
+typical_yoe_label: 4–9 yrs
+search_query: Solutions Architect
+company_examples:
+  - Databricks Solutions Architect
+  - AWS / GCP Customer Engineer
+  - OpenAI Solutions Architect
+  - Snowflake Sales Engineer
+aliases:
+  - Solutions Architect
+  - Senior Solutions Architect
+  - Enterprise Solutions Architect
+  - Customer Engineer
+  - Partner Solutions Engineer
+  - Sales Engineer
+  - Technical Solutions Engineer
+  - Cloud Solutions Architect
+  - AI Solutions Architect
+description: 4–9 YoE · Enterprise architecture reviews, technical PoCs, cloud/AI integration & executive pre-sales guidance
+target_yoe_range:
+  - 4
+  - 9
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.8
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - aws
+    - gcp
+    - azure
+    - python
+    - sql
+    - system architecture
+    - enterprise software
+    - api integration
+    - proof of concept
+    - customer facing
+    - llm
+    - kubernetes
+  important_systems:
+    - security
+    - sso
+    - data warehouse
+    - snowflake
+    - databricks
+    - rag
+    - networking
+    - migration
+    - scalability
+  senior_leadership:
+    - executive communication
+    - pre-sales
+    - technical discovery
+    - workshop
+    - rfp
+    - stakeholder alignment
+  bonus_nice_to_have:
+    - terraform
+    - spark
+    - kafka
+    - docker
+    - vector database

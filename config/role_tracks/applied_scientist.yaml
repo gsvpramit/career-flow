@@ -1,0 +1,71 @@
+id: applied_scientist
+display_name: Applied Scientist / Research Engineer
+category: ai_data
+typical_yoe_label: 3–8 yrs
+search_query: Applied Scientist Research Engineer
+company_examples:
+  - Amazon Applied Scientist
+  - OpenAI Research Engineer
+  - Anthropic Research Engineer
+  - Google DeepMind Research
+  - Meta FAIR Engineer
+aliases:
+  - Applied Scientist
+  - Senior Applied Scientist
+  - Research Engineer
+  - AI Research Engineer
+  - ML Research Engineer
+  - Research Scientist
+  - Applied AI Scientist
+  - Post-Training Engineer
+  - Pretraining Engineer
+  - Alignment Engineer
+description: 3–8 YoE (or MS/PhD) · Amazon Applied Scientist, OpenAI/Anthropic Research Engineer — post-training, RLHF, fine-tuning & benchmarks
+target_yoe_range:
+  - 3
+  - 8
+weights:
+  core_must_have: 3.0
+  important_systems: 2.0
+  senior_leadership: 1.5
+  bonus_nice_to_have: 1.0
+keywords:
+  core_must_have:
+    - python
+    - pytorch
+    - transformers
+    - fine-tuning
+    - rlhf
+    - post-training
+    - pretraining
+    - evaluation
+    - benchmarking
+    - deep learning
+    - llm
+    - distributed training
+    - fsdp
+    - deepspeed
+  important_systems:
+    - cuda
+    - triton
+    - lora
+    - preference optimization
+    - dpo
+    - synthetic data
+    - tokenization
+    - scaling laws
+    - experimentation
+    - ablations
+  senior_leadership:
+    - research roadmap
+    - publications
+    - cross-functional
+    - mentorship
+    - reproducibility
+  bonus_nice_to_have:
+    - jax
+    - megatron
+    - flashattention
+    - vllm
+    - sglang
+    - multimodal

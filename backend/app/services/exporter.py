@@ -24,6 +24,7 @@ from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer,
 
 from backend.app.schemas.job import ATSReport, JobAnalysis
 from backend.app.schemas.resume import CanonicalResume
+from backend.app.services.timezone_utils import eastern_today_str
 
 
 def _slugify(value: str, fallback: str = "item") -> str:
@@ -33,7 +34,7 @@ def _slugify(value: str, fallback: str = "item") -> str:
 
 def build_output_folder_name(company: str, title: str, job_id: int) -> str:
     """Create deterministic organized folder name under output/."""
-    date_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_prefix = eastern_today_str()
     return f"{date_prefix}_{_slugify(company, 'company')}_{_slugify(title, 'role')}_j{job_id}"
 
 
@@ -43,26 +44,30 @@ def _build_contact_line(resume: CanonicalResume) -> str:
     return "  |  ".join(parts)
 
 
-def render_pdf_resume(resume: CanonicalResume, output_path: Path) -> bool:
+def render_pdf_resume(resume: CanonicalResume, output_path: Path, page_budget: float = 1.5) -> bool:
     """Render single-column Big Tech PDF via ReportLab and verify selectable text layer."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    margin = 0.5 * inch
+    compact = float(page_budget or 1.5) <= 1.05
+    expanded = float(page_budget or 1.5) >= 2.5
+    margin = (0.38 if compact else (0.52 if expanded else 0.46)) * inch
     usable_width = letter[0] - 2 * margin
+    body_size = 8.4 if compact else (9.3 if expanded else 8.9)
+    leading_sz = 10.4 if compact else (11.8 if expanded else 11.2)
 
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=letter,
         leftMargin=margin,
         rightMargin=margin,
-        topMargin=0.45 * inch,
-        bottomMargin=0.45 * inch,
+        topMargin=(0.35 if compact else (0.50 if expanded else 0.42)) * inch,
+        bottomMargin=(0.35 if compact else (0.50 if expanded else 0.42)) * inch,
         title=f"{resume.contact.full_name} Resume",
     )
 
     name_style = ParagraphStyle(
         "NameHeader",
         fontName="Helvetica-Bold",
-        fontSize=15,
+        fontSize=14.5 if compact else 15.5,
         leading=18,
         alignment=TA_CENTER,
         spaceAfter=2,
@@ -70,55 +75,55 @@ def render_pdf_resume(resume: CanonicalResume, output_path: Path) -> bool:
     contact_style = ParagraphStyle(
         "ContactLine",
         fontName="Helvetica",
-        fontSize=8.8,
+        fontSize=8.5 if compact else 8.8,
         leading=11,
         alignment=TA_CENTER,
-        spaceAfter=6,
+        spaceAfter=5,
     )
     section_style = ParagraphStyle(
         "SectionHeader",
         fontName="Helvetica-Bold",
-        fontSize=10,
+        fontSize=9.2 if compact else (10.5 if expanded else 9.8),
         leading=12,
-        spaceBefore=6,
+        spaceBefore=3.5 if compact else (7 if expanded else 5),
         spaceAfter=2,
         textColor=colors.black,
     )
     item_left_style = ParagraphStyle(
         "ItemLeft",
         fontName="Helvetica-Bold",
-        fontSize=9.5,
-        leading=12,
+        fontSize=9.2 if compact else 9.5,
+        leading=11.5,
         alignment=TA_LEFT,
     )
     item_right_style = ParagraphStyle(
         "ItemRight",
         fontName="Helvetica",
-        fontSize=9.0,
-        leading=12,
+        fontSize=body_size,
+        leading=11.5,
         alignment=TA_RIGHT,
     )
     sub_left_style = ParagraphStyle(
         "SubLeft",
         fontName="Helvetica-Oblique",
-        fontSize=9.0,
+        fontSize=body_size,
         leading=11,
         alignment=TA_LEFT,
     )
     bullet_style = ParagraphStyle(
         "BulletItem",
         fontName="Helvetica",
-        fontSize=9.0,
-        leading=11.5,
+        fontSize=body_size,
+        leading=leading_sz,
         leftIndent=12,
         firstLineIndent=-8,
-        spaceAfter=1.5,
+        spaceAfter=0.8 if compact else (2.2 if expanded else 1.5),
     )
     body_style = ParagraphStyle(
         "BodyLine",
         fontName="Helvetica",
-        fontSize=9.0,
-        leading=11.5,
+        fontSize=body_size,
+        leading=leading_sz,
         spaceAfter=2,
     )
 
@@ -157,7 +162,13 @@ def render_pdf_resume(resume: CanonicalResume, output_path: Path) -> bool:
         add_section_heading("Experience")
         for exp in resume.experience:
             date_span = f"{exp.start_date} - {exp.end_date}".strip(" -")
-            add_split_row(escape(exp.title), date_span, item_left_style, item_right_style)
+            role_tags: list[str] = []
+            for b in exp.bullets:
+                for t in (b.tags or []):
+                    if t and t not in role_tags:
+                        role_tags.append(t)
+            tech_suffix = f" &mdash; <font color='#4a5568'>{', '.join(role_tags[:4])}</font>" if role_tags else ""
+            add_split_row(f"<b>{escape(exp.title)}</b>{tech_suffix}", date_span, item_left_style, item_right_style)
             add_split_row(escape(exp.company), exp.location, sub_left_style, item_right_style)
             for bullet in exp.bullets:
                 if bullet.approved:
@@ -168,29 +179,11 @@ def render_pdf_resume(resume: CanonicalResume, output_path: Path) -> bool:
         add_section_heading("Projects")
         for proj in resume.projects:
             stack = f" | {', '.join(proj.tech_stack)}" if proj.tech_stack else ""
-            add_split_row(f"<b>{escape(proj.name)}</b>{escape(stack)}", proj.link, body_style, item_right_style)
+            add_split_row(f"<b>{escape(proj.name)}</b>{escape(stack)}", "", body_style, item_right_style)
             for bullet in proj.bullets:
                 if bullet.approved:
                     story.append(Paragraph(f"&bull; {escape(bullet.text)}", bullet_style))
             story.append(Spacer(1, 2))
-
-    if resume.education:
-        add_section_heading("Education")
-        for edu in resume.education:
-            add_split_row(escape(edu.institution), edu.location, item_left_style, item_right_style)
-            degree_line = edu.degree + (f" (GPA: {edu.gpa})" if edu.gpa else "")
-            add_split_row(escape(degree_line), edu.graduation_date, sub_left_style, item_right_style)
-
-    if resume.certifications:
-        add_section_heading("Certifications")
-        for cert in resume.certifications:
-            issuer_part = f" — {cert.issuer}" if cert.issuer else ""
-            add_split_row(
-                f"<b>{escape(cert.name)}</b>{escape(issuer_part)}",
-                cert.date,
-                body_style,
-                item_right_style,
-            )
 
     if resume.skills:
         add_section_heading("Technical Skills")
@@ -202,6 +195,31 @@ def render_pdf_resume(resume: CanonicalResume, output_path: Path) -> bool:
                         body_style,
                     )
                 )
+
+    if resume.education:
+        add_section_heading("Education")
+        for edu in resume.education:
+            add_split_row(escape(edu.institution), edu.location, item_left_style, item_right_style)
+            degree_line = edu.degree + (f" (GPA: {edu.gpa})" if edu.gpa else "")
+            add_split_row(escape(degree_line), edu.graduation_date, sub_left_style, item_right_style)
+            if edu.coursework:
+                story.append(
+                    Paragraph(
+                        f"<b>Coursework:</b> {escape(', '.join(edu.coursework))}",
+                        body_style,
+                    )
+                )
+
+    if resume.certifications:
+        add_section_heading("Certifications")
+        for cert in resume.certifications:
+            issuer_part = f" — {cert.issuer}" if cert.issuer else ""
+            add_split_row(
+                f"<b>{escape(cert.name)}</b>{escape(issuer_part)}",
+                cert.date,
+                body_style,
+                item_right_style,
+            )
 
     doc.build(story)
     return verify_pdf_text_layer(output_path, resume.contact.full_name)
@@ -229,16 +247,19 @@ def _add_bottom_border(paragraph) -> None:
     p_pr.append(p_bdr)
 
 
-def render_docx_resume(resume: CanonicalResume, output_path: Path) -> None:
+def render_docx_resume(resume: CanonicalResume, output_path: Path, page_budget: float = 1.5) -> None:
     """Render single-column ATS-safe .docx resume using pure paragraphs (zero tables)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = Document()
+    compact = float(page_budget or 1.5) <= 1.05
+    margin_in = 0.42 if compact else 0.5
+    top_bot_in = 0.38 if compact else 0.45
 
     for section in doc.sections:
-        section.top_margin = Inches(0.45)
-        section.bottom_margin = Inches(0.45)
-        section.left_margin = Inches(0.5)
-        section.right_margin = Inches(0.5)
+        section.top_margin = Inches(top_bot_in)
+        section.bottom_margin = Inches(top_bot_in)
+        section.left_margin = Inches(margin_in)
+        section.right_margin = Inches(margin_in)
 
     normal_style = doc.styles["Normal"]
     normal_style.font.name = "Calibri"
@@ -301,7 +322,13 @@ def render_docx_resume(resume: CanonicalResume, output_path: Path) -> None:
         add_section_header("Experience")
         for exp in resume.experience:
             date_span = f"{exp.start_date} - {exp.end_date}".strip(" -")
-            add_tabbed_line(exp.title, date_span, bold=True)
+            role_tags = []
+            for b in exp.bullets:
+                for t in (b.tags or []):
+                    if t and t not in role_tags:
+                        role_tags.append(t)
+            tech_suffix = f" — {', '.join(role_tags[:4])}" if role_tags else ""
+            add_tabbed_line(f"{exp.title}{tech_suffix}", date_span, bold=True)
             add_tabbed_line(exp.company, exp.location, italic=True)
             for bullet in exp.bullets:
                 if bullet.approved:
@@ -311,23 +338,10 @@ def render_docx_resume(resume: CanonicalResume, output_path: Path) -> None:
         add_section_header("Projects")
         for proj in resume.projects:
             stack = f" | {', '.join(proj.tech_stack)}" if proj.tech_stack else ""
-            add_tabbed_line(f"{proj.name}{stack}", proj.link, bold=True)
+            add_tabbed_line(f"{proj.name}{stack}", "", bold=True)
             for bullet in proj.bullets:
                 if bullet.approved:
                     add_bullet(bullet.text)
-
-    if resume.education:
-        add_section_header("Education")
-        for edu in resume.education:
-            add_tabbed_line(edu.institution, edu.location, bold=True)
-            degree_line = edu.degree + (f" (GPA: {edu.gpa})" if edu.gpa else "")
-            add_tabbed_line(degree_line, edu.graduation_date, italic=True)
-
-    if resume.certifications:
-        add_section_header("Certifications")
-        for cert in resume.certifications:
-            issuer_part = f" — {cert.issuer}" if cert.issuer else ""
-            add_tabbed_line(f"{cert.name}{issuer_part}", cert.date)
 
     if resume.skills:
         add_section_header("Technical Skills")
@@ -343,6 +357,28 @@ def render_docx_resume(resume: CanonicalResume, output_path: Path) -> None:
             val_r = p.add_run(", ".join(cat.items))
             val_r.font.size = Pt(9.5)
 
+    if resume.education:
+        add_section_header("Education")
+        for edu in resume.education:
+            add_tabbed_line(edu.institution, edu.location, bold=True)
+            degree_line = edu.degree + (f" (GPA: {edu.gpa})" if edu.gpa else "")
+            add_tabbed_line(degree_line, edu.graduation_date, italic=True)
+            if edu.coursework:
+                cp = doc.add_paragraph()
+                cp.paragraph_format.space_before = Pt(0)
+                cp.paragraph_format.space_after = Pt(2)
+                cr1 = cp.add_run("Coursework: ")
+                cr1.bold = True
+                cr1.font.size = Pt(9.0)
+                cr2 = cp.add_run(", ".join(edu.coursework))
+                cr2.font.size = Pt(9.0)
+
+    if resume.certifications:
+        add_section_header("Certifications")
+        for cert in resume.certifications:
+            issuer_part = f" — {cert.issuer}" if cert.issuer else ""
+            add_tabbed_line(f"{cert.name}{issuer_part}", cert.date)
+
     doc.save(str(output_path))
 
 
@@ -355,21 +391,32 @@ def build_resume_filename_stem(
     resume: CanonicalResume,
     job: JobAnalysis,
     filename_format: str = "{full_name}_{company}_{role}",
+    job_id: int | None = None,
+    run_id: int | None = None,
 ) -> str:
-    """Format a safe export filename stem such as Pramit_Ray_Anthropic_Senior_Software_Engineer."""
+    """Format a clean, unique export filename stem such as Alex_Rivera_Stripe_Senior_Engineer_J42_R7."""
     tokens = {
         "full_name": _clean_token(resume.contact.full_name or "Candidate", "Candidate"),
         "company": _clean_token(job.company or "Company", "Company"),
         "role": _clean_token(job.title or "Role", "Role"),
         "location": _clean_token(job.location or "Location", "Location"),
+        "job_id": f"J{job_id}" if job_id else "",
+        "run_id": f"R{run_id}" if run_id else "",
     }
     raw_fmt = (filename_format or "{full_name}_{company}_{role}").strip()
     try:
         rendered = raw_fmt.format(**tokens)
     except Exception:
         rendered = f"{tokens['full_name']}_{tokens['company']}_{tokens['role']}"
-    sanitized = re.sub(r"[^a-zA-Z0-9._-]+", "_", rendered).strip("_.-")
-    return sanitized[:110] or "resume"
+
+    if job_id and "{job_id}" not in raw_fmt:
+        rendered = f"{rendered}_J{job_id}"
+    if run_id and "{run_id}" not in raw_fmt:
+        rendered = f"{rendered}_R{run_id}"
+
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]+", "_", rendered)
+    sanitized = re.sub(r"_+", "_", sanitized).strip("_.-")
+    return sanitized[:115] or "resume"
 
 
 def export_run_artifacts(
@@ -379,6 +426,8 @@ def export_run_artifacts(
     report: ATSReport,
     formats: Sequence[str],
     filename_format: str = "{full_name}_{company}_{role}",
+    page_budget: float = 1.5,
+    run_id: int | None = None,
 ) -> tuple[Path, list[str], bool | None]:
     """Write resume files + JSON audit snapshots into an organized output/ subfolder."""
     folder_name = build_output_folder_name(job.company, job.title, report.job_id)
@@ -389,20 +438,26 @@ def export_run_artifacts(
         target_dir = output_root / f"{folder_name}_{suffix}"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    stem = build_resume_filename_stem(resume, job, filename_format)
+    stem = build_resume_filename_stem(
+        resume,
+        job,
+        filename_format,
+        job_id=report.job_id or None,
+        run_id=run_id,
+    )
     generated: list[str] = []
     pdf_verified: bool | None = None
 
     if "pdf" in formats:
         pdf_name = f"{stem}.pdf"
         pdf_path = target_dir / pdf_name
-        pdf_verified = render_pdf_resume(resume, pdf_path)
+        pdf_verified = render_pdf_resume(resume, pdf_path, page_budget=page_budget)
         generated.append(pdf_name)
 
     if "docx" in formats:
         docx_name = f"{stem}.docx"
         docx_path = target_dir / docx_name
-        render_docx_resume(resume, docx_path)
+        render_docx_resume(resume, docx_path, page_budget=page_budget)
         generated.append(docx_name)
 
     (target_dir / "job_posting.json").write_text(

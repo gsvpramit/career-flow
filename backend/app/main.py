@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import os
+import secrets
+import threading
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -19,6 +26,7 @@ from backend.app.api.routes_resumes import router as resumes_router
 from backend.app.config import DEFAULT_DB_PATH, PROJECT_ROOT
 from backend.app.db.database import Base, build_engine, build_session_factory
 from backend.app.db import models as _models  # noqa: F401 - registers ORM tables
+from backend.app.services.batch_scraper import ScrapeProgressStore
 from backend.app.services.config_manager import ConfigManager
 
 
@@ -58,7 +66,11 @@ def _ensure_v2_sqlite_columns(engine) -> None:
         ("job_postings", "work_auth", "VARCHAR(40) NOT NULL DEFAULT 'unspecified'"),
         ("job_postings", "disposition", "VARCHAR(40) NOT NULL DEFAULT 'kept'"),
         ("job_postings", "application_status", "VARCHAR(40) NOT NULL DEFAULT 'ready'"),
+        ("job_postings", "applied_at", "DATETIME"),
+        ("job_postings", "application_notes", "TEXT NOT NULL DEFAULT ''"),
         ("job_postings", "relevance_score", "FLOAT NOT NULL DEFAULT 0.0"),
+        ("session_filtered_jobs", "filter_reasons_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("session_filtered_jobs", "suitability_details_json", "TEXT NOT NULL DEFAULT '[]'"),
     ]
     with engine.begin() as conn:
         for table, column, col_def in alterations:
@@ -67,6 +79,92 @@ def _ensure_v2_sqlite_columns(engine) -> None:
             cols = {c["name"] for c in inspector.get_columns(table)}
             if column not in cols:
                 conn.execute(sa_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
+
+
+_SECURITY_HEADERS: dict[str, str] = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "X-Robots-Tag": "noindex, nofollow",
+}
+
+
+class _AuthRateLimiter:
+    """In-memory sliding-window lockout limiter against repeated failed Basic Auth attempts."""
+
+    def __init__(self, max_failures: int = 8, window_seconds: int = 300) -> None:
+        self.max_failures = max_failures
+        self.window_seconds = window_seconds
+        self._lock = threading.Lock()
+        self._failures: dict[str, deque[float]] = {}
+
+    def _prune(self, key: str, now: float) -> deque[float]:
+        q = self._failures.get(key)
+        if q is None:
+            return deque()
+        cutoff = now - self.window_seconds
+        while q and q[0] < cutoff:
+            q.popleft()
+        if not q:
+            self._failures.pop(key, None)
+        return q
+
+    def retry_after(self, key: str) -> int:
+        now = time.monotonic()
+        with self._lock:
+            q = self._prune(key, now)
+            if len(q) >= self.max_failures:
+                remaining = int(self.window_seconds - (now - q[0]))
+                return max(1, remaining)
+            return 0
+
+    def record_failure(self, key: str) -> int:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._failures) >= 2048 and key not in self._failures:
+                oldest_key = next(iter(self._failures))
+                self._failures.pop(oldest_key, None)
+            q = self._prune(key, now)
+            if not q:
+                q = deque()
+                self._failures[key] = q
+            q.append(now)
+            if len(q) >= self.max_failures:
+                remaining = int(self.window_seconds - (now - q[0]))
+                return max(1, remaining)
+            return 0
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._failures.pop(key, None)
+
+
+def _client_ip(request: Request) -> str:
+    cf_ip = (request.headers.get("cf-connecting-ip") or "").strip()
+    if cf_ip:
+        return cf_ip
+    xff = (request.headers.get("x-forwarded-for") or "").strip()
+    if xff:
+        return xff.split(",")[0].strip() or "unknown"
+    return request.client.host if request.client else "unknown"
+
+
+def _is_basic_authorized(auth_header: str | None, expected_user: str, expected_pass: str) -> bool:
+    if not auth_header:
+        return False
+    scheme, _, token = auth_header.partition(" ")
+    if scheme.lower() != "basic" or not token.strip():
+        return False
+    try:
+        decoded = base64.b64decode(token.strip(), validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    if ":" not in decoded:
+        return False
+    user, password = decoded.split(":", 1)
+    user_ok = secrets.compare_digest(user.encode("utf-8"), expected_user.encode("utf-8"))
+    pass_ok = secrets.compare_digest(password.encode("utf-8"), expected_pass.encode("utf-8"))
+    return user_ok and pass_ok
 
 
 def create_app(
@@ -98,17 +196,73 @@ def create_app(
     application.state.engine = engine
     application.state.session_factory = session_factory
     application.state.output_dir_override = output_dir_override
+    application.state.scrape_progress = ScrapeProgressStore()
 
+    extra_origins = [
+        o.strip()
+        for o in os.getenv("CAREERFLOW_ALLOWED_ORIGINS", "").split(",")
+        if o.strip()
+    ]
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            *extra_origins,
         ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    auth_pass = os.getenv("CAREERFLOW_BASIC_AUTH_PASS", "").strip()
+    auth_user = os.getenv("CAREERFLOW_BASIC_AUTH_USER", "").strip() or "careerflow"
+    max_auth_failures = max(3, int(os.getenv("CAREERFLOW_AUTH_MAX_FAILURES", "8") or "8"))
+    rate_limiter = _AuthRateLimiter(max_failures=max_auth_failures, window_seconds=300)
+
+    @application.middleware("http")
+    async def security_and_auth_middleware(request: Request, call_next) -> Response:
+        if auth_pass:
+            client_key = _client_ip(request)
+            auth_header = request.headers.get("authorization")
+            wait_sec = rate_limiter.retry_after(client_key)
+            if wait_sec > 0 and request.url.path != "/api/health":
+                return Response(
+                    content="Too many failed login attempts. Retry later.",
+                    status_code=429,
+                    headers={
+                        "Retry-After": str(wait_sec),
+                        **_SECURITY_HEADERS,
+                    },
+                )
+            authorized = _is_basic_authorized(auth_header, auth_user, auth_pass)
+            if not authorized:
+                if request.url.path == "/api/health":
+                    return JSONResponse({"status": "ok"}, headers=_SECURITY_HEADERS)
+                if auth_header:
+                    locked_sec = rate_limiter.record_failure(client_key)
+                    if locked_sec > 0:
+                        return Response(
+                            content="Too many failed login attempts. Retry later.",
+                            status_code=429,
+                            headers={
+                                "Retry-After": str(locked_sec),
+                                **_SECURITY_HEADERS,
+                            },
+                        )
+                return Response(
+                    content="Authentication required.",
+                    status_code=401,
+                    headers={
+                        "WWW-Authenticate": 'Basic realm="CareerFlow Studio"',
+                        **_SECURITY_HEADERS,
+                    },
+                )
+            rate_limiter.clear(client_key)
+        response = await call_next(request)
+        for header_name, header_val in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header_name, header_val)
+        return response
 
     @application.get("/api/health", tags=["system"])
     def health(cfg_mgr: ConfigManager = Depends(get_config_manager)) -> dict[str, object]:
