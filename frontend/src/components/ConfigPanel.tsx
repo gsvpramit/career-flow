@@ -59,7 +59,7 @@ export function ConfigPanel({ config, roleTracks, onUpdated, onDataFlushed }: Co
   const [flushSeen, setFlushSeen] = useState(true);
   const [seenScope, setSeenScope] = useState<"all" | "discarded" | "auto_filtered">("all");
   const [flushResumes, setFlushResumes] = useState(false);
-  const [confirmMode, setConfirmMode] = useState<"none" | "master" | "selective">("none");
+  const [isConfirmingFlush, setIsConfirmingFlush] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -264,25 +264,50 @@ export function ConfigPanel({ config, roleTracks, onUpdated, onDataFlushed }: Co
     }
   };
 
-  const handleFlushData = async (mode: "master" | "selective") => {
+  const applyPresetKeepResumes = () => {
+    setFlushSessions(true);
+    setFlushRuns(true);
+    setFlushOutputs(true);
+    setFlushSeen(true);
+    setFlushResumes(false);
+    setIsConfirmingFlush(false);
+  };
+
+  const applyPresetAll = () => {
+    setFlushSessions(true);
+    setFlushRuns(true);
+    setFlushOutputs(true);
+    setFlushSeen(true);
+    setFlushResumes(true);
+    setIsConfirmingFlush(false);
+  };
+
+  const applyPresetClear = () => {
+    setFlushSessions(false);
+    setFlushRuns(false);
+    setFlushOutputs(false);
+    setFlushSeen(false);
+    setFlushResumes(false);
+    setIsConfirmingFlush(false);
+  };
+
+  const handleFlushData = async () => {
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await api.flushData(
-        mode === "master"
-          ? { master_flush: true }
-          : {
-              master_flush: false,
-              flush_sessions_and_jobs: flushSessions,
-              flush_tailoring_runs: flushRuns,
-              flush_output_files: flushOutputs,
-              flush_seen_history: flushSeen,
-              seen_scope: seenScope,
-              flush_resumes: flushResumes,
-            }
-      );
-      setConfirmMode("none");
+      const isMasterPreset =
+        flushSessions && flushRuns && flushOutputs && flushSeen && !flushResumes;
+      const res = await api.flushData({
+        master_flush: isMasterPreset,
+        flush_sessions_and_jobs: flushSessions,
+        flush_tailoring_runs: flushRuns,
+        flush_output_files: flushOutputs,
+        flush_seen_history: flushSeen,
+        seen_scope: seenScope,
+        flush_resumes: flushResumes,
+      });
+      setIsConfirmingFlush(false);
       try {
         localStorage.removeItem("careerflow.jobProgress.v1");
         localStorage.removeItem("careerflow.jobDrafts.v1");
@@ -1183,140 +1208,183 @@ export function ConfigPanel({ config, roleTracks, onUpdated, onDataFlushed }: Co
       </div>
 
       {/* Reset Workspace (Full Width) */}
-      <div className="card stack-md" style={{ overflow: "hidden" }}>
-        <div className="row-between">
-          <div>
-            <strong style={{ fontSize: 14 }}>Reset Workspace</strong>
-            <div className="small-note">
-              Reset test runs cleanly. Master Flush wipes everything except saved resumes &amp; config.
-            </div>
-          </div>
-          {confirmMode === "master" ? (
-            <div className="row-wrap">
-              <button
-                type="button"
-                className="btn btn-sm btn-danger-ghost"
-                onClick={() => void handleFlushData("master")}
-                disabled={saving}
-              >
-                Confirm Master Flush
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => setConfirmMode("none")}
-                disabled={saving}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-danger-ghost"
-              onClick={() => setConfirmMode("master")}
-              disabled={saving}
-            >
-              Master Flush (Keep Resumes)
-            </button>
-          )}
-        </div>
+      {(() => {
+        const hasFlushSelection =
+          flushSessions || flushRuns || flushOutputs || flushSeen || flushResumes;
+        const isAllFlushSelected =
+          flushSessions && flushRuns && flushOutputs && flushSeen && flushResumes;
+        const isMasterFlushPreset =
+          flushSessions && flushRuns && flushOutputs && flushSeen && !flushResumes;
 
-        <div className="flush-grid">
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={flushSessions}
-              onChange={(e) => setFlushSessions(e.target.checked)}
-            />
-            <span>Sessions &amp; Scraped Jobs</span>
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={flushRuns}
-              onChange={(e) => setFlushRuns(e.target.checked)}
-            />
-            <span>Tailoring Runs</span>
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={flushOutputs}
-              onChange={(e) => setFlushOutputs(e.target.checked)}
-            />
-            <span>Exported Output Files</span>
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={flushSeen}
-              onChange={(e) => setFlushSeen(e.target.checked)}
-            />
-            <span>Seen / Dedup Ledger</span>
-          </label>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={flushResumes}
-              onChange={(e) => setFlushResumes(e.target.checked)}
-            />
-            <span>Saved Resumes</span>
-          </label>
-        </div>
+        let flushButtonLabel = "Flush Selected Data";
+        if (!hasFlushSelection) {
+          flushButtonLabel = "Select Data to Flush";
+        } else if (isAllFlushSelected) {
+          flushButtonLabel = "Flush All (Includes Resumes)";
+        } else if (isMasterFlushPreset) {
+          flushButtonLabel = "Master Flush (Keep Resumes)";
+        } else if (flushResumes) {
+          flushButtonLabel = "Flush Selected (Includes Resumes)";
+        }
 
-        <div className="row-between">
-          <div className="row-wrap">
-            {flushSeen && (
-              <div style={{ minWidth: 200 }}>
-                <select
-                  value={seenScope}
-                  onChange={(e) =>
-                    setSeenScope(e.target.value as "all" | "discarded" | "auto_filtered")
-                  }
-                >
-                  <option value="all">Seen Ledger: All</option>
-                  <option value="discarded">Seen Ledger: Discarded Only</option>
-                  <option value="auto_filtered">Seen Ledger: Auto-Filtered Only</option>
-                </select>
+        return (
+          <div className="card stack-md" style={{ overflow: "hidden" }}>
+            <div className="row-between" style={{ alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div>
+                <strong style={{ fontSize: 14 }}>Reset Workspace</strong>
+                <div className="small-note">
+                  Clean test runs or reset workspace data. Choose options below, then flush.
+                </div>
               </div>
-            )}
-          </div>
-
-          {confirmMode === "selective" ? (
-            <div className="row-wrap">
-              <button
-                type="button"
-                className="btn btn-sm btn-danger-ghost"
-                onClick={() => void handleFlushData("selective")}
-                disabled={saving}
-              >
-                Confirm Selected Flush
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => setConfirmMode("none")}
-                disabled={saving}
-              >
-                Cancel
-              </button>
+              <div className="row-wrap" style={{ gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, padding: "4px 9px" }}
+                  onClick={applyPresetKeepResumes}
+                  title="Select all data except saved resumes"
+                >
+                  Master Preset (Keep Resumes)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, padding: "4px 9px" }}
+                  onClick={applyPresetAll}
+                  title="Select all data including saved resumes"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, padding: "4px 9px" }}
+                  onClick={applyPresetClear}
+                  title="Deselect all"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={
-                saving ||
-                (!flushSessions && !flushRuns && !flushOutputs && !flushSeen && !flushResumes)
-              }
-              onClick={() => setConfirmMode("selective")}
-            >
-              Flush Selected Data
-            </button>
-          )}
-        </div>
-      </div>
+
+            <div className="flush-grid">
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={flushSessions}
+                  onChange={(e) => {
+                    setFlushSessions(e.target.checked);
+                    setIsConfirmingFlush(false);
+                  }}
+                />
+                <span>Sessions &amp; Scraped Jobs</span>
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={flushRuns}
+                  onChange={(e) => {
+                    setFlushRuns(e.target.checked);
+                    setIsConfirmingFlush(false);
+                  }}
+                />
+                <span>Tailoring Runs</span>
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={flushOutputs}
+                  onChange={(e) => {
+                    setFlushOutputs(e.target.checked);
+                    setIsConfirmingFlush(false);
+                  }}
+                />
+                <span>Exported Output Files</span>
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={flushSeen}
+                  onChange={(e) => {
+                    setFlushSeen(e.target.checked);
+                    setIsConfirmingFlush(false);
+                  }}
+                />
+                <span>Seen / Dedup Ledger</span>
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={flushResumes}
+                  onChange={(e) => {
+                    setFlushResumes(e.target.checked);
+                    setIsConfirmingFlush(false);
+                  }}
+                />
+                <span style={flushResumes ? { color: "#ff6961", fontWeight: 600 } : undefined}>
+                  Saved Resumes {flushResumes && "(Deletes Resumes)"}
+                </span>
+              </label>
+            </div>
+
+            <div className="row-between" style={{ alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div className="row-wrap" style={{ alignItems: "center" }}>
+                {flushSeen && (
+                  <div style={{ minWidth: 200 }}>
+                    <select
+                      value={seenScope}
+                      onChange={(e) =>
+                        setSeenScope(e.target.value as "all" | "discarded" | "auto_filtered")
+                      }
+                    >
+                      <option value="all">Seen Ledger: All</option>
+                      <option value="discarded">Seen Ledger: Discarded Only</option>
+                      <option value="auto_filtered">Seen Ledger: Auto-Filtered Only</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                {isConfirmingFlush ? (
+                  <div className="row-wrap" style={{ alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: "#ff6961", fontWeight: 600 }}>
+                      {flushResumes
+                        ? "⚠️ Resumes will be permanently deleted!"
+                        : "Are you sure you want to flush?"}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger-ghost"
+                      onClick={() => void handleFlushData()}
+                      disabled={saving}
+                    >
+                      Confirm Flush
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => setIsConfirmingFlush(false)}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`btn ${flushResumes ? "btn-danger-ghost" : ""}`}
+                    disabled={saving || !hasFlushSelection}
+                    onClick={() => setIsConfirmingFlush(true)}
+                  >
+                    {flushButtonLabel}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="card stack-md" style={{ overflow: "hidden" }}>
         <div className="row-between">
